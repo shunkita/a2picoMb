@@ -1,0 +1,100 @@
+/*
+
+MIT License
+
+Copyright (c) 2022 Oliver Schmidt (https://a2retro.de/)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+*/
+
+#ifndef _A2PICO_H
+#define _A2PICO_H
+
+#include <hardware/pio.h>
+
+#define SM_ADDR     0
+#define SM_READ     1
+#define SM_WRITE    2
+
+#if PICO_RP2350
+
+#define RW_BIT  0x100000
+
+#define GPIO_IRQ    0
+
+#define GPIO_SDIO_CLK   34
+#define GPIO_SDIO_CMD   35
+#define GPIO_SDIO_DAT0  36
+#define GPIO_SDIO_DAT1  37
+#define GPIO_SDIO_DAT2  38
+#define GPIO_SDIO_DAT3  39
+#define GPIO_SDIO_CD    40
+
+#else
+
+#define RW_BIT  0x1000
+
+#define GPIO_IRQ    18
+
+#define GPIO_SPI0_TX    19
+#define GPIO_SPI0_RX    20
+#define GPIO_SPI0_CSN   21
+#define GPIO_SPI0_SCK   22
+
+#endif
+
+void a2pico_init(void);
+
+bool a2pico_sd(void);
+
+int a2pico_led(void);
+
+int a2pico_tx(void);
+
+int a2pico_rx(void);
+
+void a2pico_resethandler(void(*handler)(bool asserted));
+
+void a2pico_synchandler(void(*handler)(void), uint32_t counter);
+
+static __always_inline uint32_t a2pico_getaddr(void) {
+    while (pio0->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_ADDR))) {
+        tight_loop_contents();
+    }
+    return pio0->rxf[SM_ADDR];
+}
+
+static __always_inline uint32_t a2pico_getdata(void) {
+    uint retry = 32;
+    while (pio0->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_WRITE)) && --retry) {
+        tight_loop_contents();
+    }
+    return pio0->rxf[SM_WRITE];
+}
+
+static __always_inline void a2pico_putdata(uint32_t data) {
+    pio0->txf[SM_READ] = data;
+}
+
+static __always_inline void a2pico_irq(bool assert) {
+    gpio_set_dir(GPIO_IRQ, assert ? GPIO_OUT : GPIO_IN);
+}
+
+#endif

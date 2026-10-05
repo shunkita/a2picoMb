@@ -1,0 +1,25 @@
+# Build output
+build/
+build-*/
+*.uf2
+*.bin
+*.elf
+*.hex
+*.dis
+
+# OS / IDE
+.DS_Store
+.cache/
+.vscode/
+.idea/
+
+# Local / Backup
+.git.backup/
+*.bak
+*.zip
+
+refs/
+docs/
+scratch/
+mbtest/
+trtest/
