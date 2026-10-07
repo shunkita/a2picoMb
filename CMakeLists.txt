@@ -19,8 +19,9 @@ project(${PROJECT_NAME} C CXX ASM)
 pico_sdk_init()
 
 # Output binary naming scheme following Oliver Schmidt's convention:
-# <project>_A2Pico2LiteW_<version>
-set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_100")
+# <project>_A2Pico2LiteW_<version> (Oliver Schmidt uses release date YYYY-MM-DD)
+set(VERSION "2026-10-07" CACHE STRING "Firmware release date/version")
+set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_${VERSION}")
 
 add_executable(${TARGET_NAME})
 pico_add_extra_outputs(${TARGET_NAME})
