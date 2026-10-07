@@ -1,17 +1,61 @@
-add_library(a2pico INTERFACE)
+cmake_minimum_required(VERSION 3.13...3.27)
 
-if (PICO_RP2350)
-        set(A2PICO "2")
+# Fetch upstream a2pico library
+include(FetchContent)
+FetchContent_Declare(a2pico
+        GIT_REPOSITORY https://github.com/oliverschmidt/a2pico.git
+        GIT_TAG main
+        )
+FetchContent_MakeAvailable(a2pico)
+
+if (NOT DEFINED PICO_SDK_PATH AND EXISTS "/Users/oshuno/pico/pico-sdk-2.2.0")
+    set(PICO_SDK_PATH "/Users/oshuno/pico/pico-sdk-2.2.0" CACHE PATH "Path to SDK" FORCE)
 endif ()
 
-if (PICO_CYW43_SUPPORTED)
-        target_compile_definitions(a2pico INTERFACE HAVE_ENBL)
-endif ()
+include(pico_sdk_import.cmake)
 
-target_include_directories(a2pico INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+set(PROJECT_NAME a2picoMb)
+project(${PROJECT_NAME} C CXX ASM)
+pico_sdk_init()
 
-target_sources(a2pico INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/a2pico${A2PICO}.c)
+# Output binary naming scheme following Oliver Schmidt's convention:
+# <project>_A2Pico2LiteW_<version>
+set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_100")
 
-target_link_libraries(a2pico INTERFACE hardware_adc hardware_pio pico_stdlib)
+add_executable(${TARGET_NAME})
+pico_add_extra_outputs(${TARGET_NAME})
 
-pico_generate_pio_header(a2pico ${CMAKE_CURRENT_SOURCE_DIR}/a2pico${A2PICO}.pio)
+target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+pico_enable_stdio_uart(${TARGET_NAME} 0)
+pico_enable_stdio_usb(${TARGET_NAME} 1)
+
+target_sources(${TARGET_NAME} PRIVATE
+        audio.c
+        ay_audio.c
+        ayumi.c
+        board.c
+        bt_a2dp_source.c
+        main.c
+        via6522.c
+        )
+
+target_link_libraries(${TARGET_NAME} PRIVATE
+        a2pico
+        pico_multicore
+        pico_stdlib
+        pico_cyw43_arch_poll
+        pico_btstack_cyw43
+        pico_btstack_classic
+        pico_btstack_sbc_encoder
+        m
+        )
+
+target_compile_definitions(${TARGET_NAME} PRIVATE
+        CYW43_LWIP=0
+        ENABLE_CLASSIC=1
+        CYW43_USE_SPI=1
+        USE_SDIOIT=0
+        PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000
+        CYW43_WL_GPIO_LED_PIN=0
+        )
