@@ -52,8 +52,7 @@ int16_t ay_audio_get_last_max_amp(void);
 uint8_t ay_audio_get_reg(uint8_t chip_index, uint8_t reg);
 void ay_audio_get_and_reset_pcm_stats(uint32_t *pcm_samples, int16_t *min_val, int16_t *max_val,
                                       uint32_t *silent_samples, uint32_t *max_silent_run);
-void ay_audio_get_pcm_breakdown(uint32_t *total_us, uint32_t *ay0_us, uint32_t *ay1_us,
-                                uint32_t *mix_us, uint32_t *post_us);
+uint32_t ay_audio_get_last_pcm_us(void);
 void ay_audio_trigger_timing_sample(void);
 
 #endif // _AY_AUDIO_H

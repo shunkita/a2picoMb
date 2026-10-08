@@ -35,13 +35,6 @@ SOFTWARE.
 
 extern volatile bool reset;
 
-// Diagnostic states for Core1 inter-core communication
-extern volatile uint32_t core1_last_rx_value;
-extern volatile uint32_t core1_rx_count;
-extern volatile uint32_t core1_last_tx_value;
-extern volatile uint32_t core1_tx_count;
-extern volatile uint32_t core1_tx_fail_count;
-
 void board(void);
 
 #endif

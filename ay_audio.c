@@ -147,15 +147,7 @@ static uint32_t stat_silent_samples = 0;
 static uint32_t stat_current_silent_run = 0;
 static uint32_t stat_max_silent_run = 0;
 
-#define MAX_PCM_TEMP_SAMPLES 256
-static float ay_temp_out[2][MAX_PCM_TEMP_SAMPLES][2];
-static float mix_temp_buf[MAX_PCM_TEMP_SAMPLES][2];
-
 static uint32_t last_pcm_total_us = 0;
-static uint32_t last_ay0_us = 0;
-static uint32_t last_ay1_us = 0;
-static uint32_t last_mix_us = 0;
-static uint32_t last_post_us = 0;
 static volatile bool need_timing_sample = true;
 
 void ay_audio_trigger_timing_sample(void) {
@@ -165,78 +157,42 @@ void ay_audio_trigger_timing_sample(void) {
 void ay_audio_produce_pcm(int16_t *pcm_buffer, int num_samples) {
     ay_pcm_call_count++;
 
-    if (num_samples > MAX_PCM_TEMP_SAMPLES) {
-        num_samples = MAX_PCM_TEMP_SAMPLES;
-    }
-
     bool do_measure = need_timing_sample;
-    uint32_t t_start = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
+    uint32_t t_start = 0;
     if (do_measure) {
         t_start = to_us_since_boot(get_absolute_time());
     }
 
-    // 1. AY0 PCM generation (ayumi_process + ayumi_remove_dc)
+    // Single unified loop: synthesize AY0 & AY1, mix, clip, and store directly into pcm_buffer
     for (int i = 0; i < num_samples; i++) {
         ayumi_process(&ayumis[0]);
         ayumi_remove_dc(&ayumis[0]);
-        ay_temp_out[0][i][0] = ayumis[0].left;
-        ay_temp_out[0][i][1] = ayumis[0].right;
-    }
-    if (do_measure) {
-        t1 = to_us_since_boot(get_absolute_time());
-    }
 
-    // 2. AY1 PCM generation (ayumi_process + ayumi_remove_dc)
-    for (int i = 0; i < num_samples; i++) {
         ayumi_process(&ayumis[1]);
         ayumi_remove_dc(&ayumis[1]);
-        ay_temp_out[1][i][0] = ayumis[1].left;
-        ay_temp_out[1][i][1] = ayumis[1].right;
-    }
-    if (do_measure) {
-        t2 = to_us_since_boot(get_absolute_time());
-    }
 
-    // 3. 2-chip mixing
-    for (int i = 0; i < num_samples; i++) {
-        mix_temp_buf[i][0] = ay_temp_out[0][i][0] + ay_temp_out[1][i][0];
-        mix_temp_buf[i][1] = ay_temp_out[0][i][1] + ay_temp_out[1][i][1];
-    }
-    if (do_measure) {
-        t3 = to_us_since_boot(get_absolute_time());
-    }
+        float l = (ayumis[0].left + ayumis[1].left) * 16384.0f;
+        float r = (ayumis[0].right + ayumis[1].right) * 16384.0f;
 
-    // 4. Post-processing (scaling, clipping, int16 conversion, PCM buffer store)
-    for (int i = 0; i < num_samples; i++) {
-        float l = mix_temp_buf[i][0] * 16384.0f;
-        float r = mix_temp_buf[i][1] * 16384.0f;
         if (l > 32767.0f) l = 32767.0f;
         if (l < -32768.0f) l = -32768.0f;
         if (r > 32767.0f) r = 32767.0f;
         if (r < -32768.0f) r = -32768.0f;
+
         pcm_buffer[i * 2]     = (int16_t)l;
         pcm_buffer[i * 2 + 1] = (int16_t)r;
     }
+
     if (do_measure) {
-        t4 = to_us_since_boot(get_absolute_time());
-        last_pcm_total_us = t4 - t_start;
-        last_ay0_us = t1 - t_start;
-        last_ay1_us = t2 - t1;
-        last_mix_us = t3 - t2;
-        last_post_us = t4 - t3;
+        last_pcm_total_us = to_us_since_boot(get_absolute_time()) - t_start;
         need_timing_sample = false;
     }
 
     stat_pcm_samples += num_samples;
 }
 
-void ay_audio_get_pcm_breakdown(uint32_t *total_us, uint32_t *ay0_us, uint32_t *ay1_us,
-                                uint32_t *mix_us, uint32_t *post_us) {
-    if (total_us) *total_us = last_pcm_total_us;
-    if (ay0_us)   *ay0_us   = last_ay0_us;
-    if (ay1_us)   *ay1_us   = last_ay1_us;
-    if (mix_us)   *mix_us   = last_mix_us;
-    if (post_us)  *post_us  = last_post_us;
+uint32_t ay_audio_get_last_pcm_us(void) {
+    return last_pcm_total_us;
 }
 
 uint32_t ay_audio_get_pcm_calls(void) {

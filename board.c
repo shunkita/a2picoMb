@@ -26,7 +26,6 @@ SOFTWARE.
 */
 
 #include <stddef.h>
-#include <pico/multicore.h>
 #include <a2pico.h>
 #include "a2pico2.pio.h"
 
@@ -39,34 +38,17 @@ SOFTWARE.
 
 volatile bool reset;
 
-// Diagnostic states for Core1 inter-core communication
-volatile uint32_t core1_last_rx_value = 0;
-volatile uint32_t core1_rx_count = 0;
-volatile uint32_t core1_last_tx_value = 0;
-volatile uint32_t core1_tx_count = 0;
-volatile uint32_t core1_tx_fail_count = 0;
-
 // Flat 2 VIA instances (MockingBoard #0 only):
 // vias[0]: VIA #0 ($Cn00-$Cn0F)
 // vias[1]: VIA #1 ($Cn80-$Cn8F)
 static via6522_t vias[2];
 
 // 4 Audio Event Queues (Core 1 -> Core 0)
+// Reserved for 2 Mockingboards (4 AY chips); currently MB#0 uses queues 0 and 1
 audio_queue_t audio_queues[NUM_AUDIO_QUEUES];
 
 // AY register address latch state for each VIA (R0-R15)
 static uint8_t ay_selected_reg[2];
-
-static __always_inline bool core1_send_to_core0(uint32_t data) {
-    if (multicore_fifo_wready()) {
-        sio_hw->fifo_wr = data;
-        core1_last_tx_value = data;
-        core1_tx_count++;
-        return true;
-    }
-    core1_tx_fail_count++;
-    return false;
-}
 
 static __always_inline void update_irq(void) {
     bool assert_irq = false;
@@ -243,12 +225,6 @@ static __always_inline uint32_t mb_getaddr(void) {
             }
         }
 
-        // Non-blocking Core 0 -> Core 1 receive check in idle loop
-        if (multicore_fifo_rvalid()) {
-            core1_last_rx_value = sio_hw->fifo_rd;
-            core1_rx_count++;
-        }
-
         tight_loop_contents();
     }
     return pio0->rxf[SM_ADDR];
@@ -272,7 +248,7 @@ void __time_critical_func(board)(void) {
         via6522_init(&vias[i]);
         ay_selected_reg[i] = 0;
     }
-    // Initialize 4 audio event queues
+    // Initialize 4 audio event queues (MB#0 uses queues 0 and 1, reserved for 2 MBs)
     for (int i = 0; i < NUM_AUDIO_QUEUES; i++) {
         audio_queue_init(&audio_queues[i]);
     }
@@ -291,9 +267,6 @@ void __time_critical_func(board)(void) {
     pio_sm_set_enabled(pio0, SM_SYNC, true);
 
     a2pico_resethandler(&handler);
-
-    // Send boot-time diagnostic test message from Core 1 to Core 0 (non-blocking)
-    core1_send_to_core0(0x12345678);
 
     while (true) {
         uint32_t pico = mb_getaddr();
@@ -336,9 +309,6 @@ void __time_critical_func(board)(void) {
                     if (reg == REG_ORB) {
                         handle_ay_orb_write(target_via, data);
                     }
-                } else if ((offset & 0xF0) == 0x70) {
-                    // Diagnostic: ad-hoc trigger for Core1 -> Core0 transfer ($Cn70 write)
-                    core1_send_to_core0(0x12345678);
                 }
             }
         }

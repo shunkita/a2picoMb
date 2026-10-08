@@ -108,14 +108,13 @@ void audio_service(void) {
     uint32_t pkts_rate = (elapsed_ms > 0) ? (delta_pkts * 1000) / elapsed_ms : delta_pkts;
     uint32_t gen_rate = (elapsed_ms > 0) ? (delta_gen * 1000) / elapsed_ms : delta_gen;
 
-    uint32_t pcm_tot = 0, ay0_us = 0, ay1_us = 0, mix_us = 0, post_us = 0;
-    ay_audio_get_pcm_breakdown(&pcm_tot, &ay0_us, &ay1_us, &mix_us, &post_us);
+    uint32_t pcm_tot = ay_audio_get_last_pcm_us();
     ay_audio_trigger_timing_sample();
 
-    printf("[AUDIO] pcm_samples=%lu/sec (raw=%lu), pcm_calls=%lu/sec, pkts=%lu/sec (gen=%lu wait=%lu, stream=%d) [pcm=%luus ay0=%luus ay1=%luus]\n",
+    printf("[AUDIO] pcm_samples=%lu/sec (raw=%lu), pcm_calls=%lu/sec, pkts=%lu/sec (gen=%lu wait=%lu, stream=%d) [pcm=%luus]\n",
            pcm_rate, pcm_samples, calls_rate, pkts_rate,
            gen_rate, delta_wait,
            bt_a2dp_source_is_streaming() ? 1 : 0,
-           pcm_tot, ay0_us, ay1_us);
+           pcm_tot);
   }
 }
