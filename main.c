@@ -77,14 +77,14 @@ static inline bool core0_send_to_core1(uint32_t data) {
 }
 
 void main(void) {
-    busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
-    multicore_launch_core1(board);
-
     set_sys_clock_khz(200000, false);
+
+    stdio_usb_init();
 
     board_led_init();
 
-    stdio_usb_init();
+    busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
+    multicore_launch_core1(board);
 
     printf("\n\nA2Pico Mockingboard (Core0 / Core1 Inter-Core Communication)\n\n");
 

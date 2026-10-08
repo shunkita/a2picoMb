@@ -18,9 +18,13 @@ set(PROJECT_NAME a2picoMb)
 project(${PROJECT_NAME} C CXX ASM)
 pico_sdk_init()
 
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif ()
+
 # Output binary naming scheme following Oliver Schmidt's convention:
 # <project>_A2Pico2LiteW_<version> (Oliver Schmidt uses release date YYYY-MM-DD)
-set(VERSION "2026-10-07" CACHE STRING "Firmware release date/version")
+set(VERSION "2026-10-08" CACHE STRING "Firmware release date/version")
 set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_${VERSION}")
 
 add_executable(${TARGET_NAME})
@@ -53,6 +57,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
         )
 
 target_compile_definitions(${TARGET_NAME} PRIVATE
+        A2PICO2=1
         CYW43_LWIP=0
         ENABLE_CLASSIC=1
         CYW43_USE_SPI=1
