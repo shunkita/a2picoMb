@@ -64,9 +64,6 @@ void audio_service(void) {
     ay_event_t ev;
     while (audio_queue_pop(queue, &ev)) {
       audio_event_count[q]++;
-      if (ev.type == AY_EVENT_RESET) {
-        printf("[AUDIO EVT] Q%d RESET\n", q);
-      }
       ay_audio_handle_event(q, &ev);
 #if QUEUE_DRAIN_DELAY_US > 0
       sleep_us(QUEUE_DRAIN_DELAY_US);

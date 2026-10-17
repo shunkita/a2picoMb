@@ -142,6 +142,7 @@ static __always_inline void handle_t1_via_underflow(via6522_t *via,
                                                     bool *irq_updated) {
   if (via->acr & 0x40) {
     via->ifr |= 0x40;
+    via->t1_counter = via->t1_latch;
     *irq_updated = true;
   } else {
     if (!via->t1_underflowed) {
@@ -150,7 +151,6 @@ static __always_inline void handle_t1_via_underflow(via6522_t *via,
       *irq_updated = true;
     }
   }
-  via->t1_counter = via->t1_latch;
 }
 
 static __always_inline void handle_t1_events(uint32_t ev) {
