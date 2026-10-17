@@ -24,7 +24,7 @@ endif ()
 
 # Output binary naming scheme following Oliver Schmidt's convention:
 # <project>_A2Pico2LiteW_<version> (Oliver Schmidt uses release date YYYY-MM-DD)
-set(VERSION "2026-10-08" CACHE STRING "Firmware release date/version")
+set(VERSION "2026-10-17" CACHE STRING "Firmware release date/version" FORCE)
 set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_${VERSION}")
 
 add_executable(${TARGET_NAME})
