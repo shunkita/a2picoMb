@@ -48,7 +48,7 @@ void via6522_init(via6522_t *via) {
     via->t2_latch = 0xFFFF;
     via->t2_counter = 0xFFFF;
     via->t2_underflowed = true;
-    via->t2_running = 0;
+    via->t2_armed = 0;
 }
 
 void via6522_reset(via6522_t *via) {
@@ -72,7 +72,7 @@ void via6522_reset(via6522_t *via) {
     via->t2_latch = 0xFFFF;
     via->t2_counter = 0xFFFF;
     via->t2_underflowed = true;
-    via->t2_running = 0;
+    via->t2_armed = 0;
 }
 
 uint8_t __time_critical_func(via6522_read)(via6522_t *via, uint8_t reg) {
@@ -175,8 +175,11 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
     case REG_T1CH: // $05
         // 6522 spec: writes to T1C-H write high-order latch, transfer entire latch
         // into counter, clear IFR bit 6, and start Timer 1 counting.
+        // Method A: In real 6522 hardware, the first decrement occurs on cycle 2 following the write.
+        // Pre-initializing t1_counter to (latch + 1) ensures that after 15 Phi0 ticks,
+        // exactly 14 decrements have taken effect, yielding N - 14 ($F1 for N=$FF).
         via->t1_latch = (via->t1_latch & 0x00FF) | ((uint16_t)data << 8);
-        via->t1_counter = via->t1_latch;
+        via->t1_counter = via->t1_latch + 1;
         via->timer_running |= TIMER_T1_RUNNING;
         via->t1_underflowed = false;
         via->ifr &= ~0x40;
@@ -198,10 +201,15 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
         break;
 
     case REG_T2CH: // $09
+        // 6522 spec: writes to T2C-H write high-order latch, transfer entire latch
+        // into counter, clear IFR bit 5, and start Timer 2 counting.
+        // Method A: In real 6522 hardware, the first decrement occurs on cycle 2 following the write.
+        // Pre-initializing t2_counter to (latch + 1) ensures that after 15 Phi0 ticks,
+        // exactly 14 decrements have taken effect, yielding N - 14 ($F1 for N=$FF).
         via->t2_latch = (via->t2_latch & 0x00FF) | ((uint16_t)data << 8);
-        via->t2_counter = via->t2_latch;
+        via->t2_counter = via->t2_latch + 1;
         via->timer_running |= TIMER_T2_RUNNING;
-        via->t2_running = (via->acr & 0x20) ? 0 : 1;
+        via->t2_armed = (via->acr & 0x20) ? 0 : 1;
         via->t2_underflowed = false;
         via->ifr &= ~0x20;
         break;
@@ -213,8 +221,8 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
 
     case REG_ACR: // $0B
         via->acr = data;
-        if (via->timer_running & TIMER_T2_RUNNING) {
-            via->t2_running = (data & 0x20) ? 0 : 1;
+        if (data & 0x20) {
+            via->t2_armed = 0;
         }
         break;
 
@@ -251,12 +259,8 @@ bool __time_critical_func(via6522_sync_tick)(via6522_t *via) {
 
     if (via->timer_running & TIMER_T1_RUNNING) {
         if (via->t1_counter == 0) {
-            // ACR bit 6 selects Timer 1 mode:
-            // 0 = one-shot mode (decrement continues past zero to 0xFFFF, but IFR6 is only set on first underflow)
-            // 1 = free-running mode (reload counter from latch and continue)
             if (via->acr & 0x40) {
                 via->ifr |= 0x40;
-                via->t1_counter = via->t1_latch;
                 irq = true;
             } else {
                 if (!via->t1_underflowed) {
@@ -264,18 +268,18 @@ bool __time_critical_func(via6522_sync_tick)(via6522_t *via) {
                     via->t1_underflowed = true;
                     irq = true;
                 }
-                via->t1_counter--;
             }
+            via->t1_counter = via->t1_latch;
         } else {
             via->t1_counter--;
         }
     }
 
-    if ((via->timer_running & TIMER_T2_RUNNING) && !(via->acr & 0x20)) {
+    if (!(via->acr & 0x20)) {
         if (via->t2_counter == 0) {
-            if (!via->t2_underflowed) {
+            if (via->t2_armed) {
                 via->ifr |= 0x20;
-                via->t2_underflowed = true;
+                via->t2_armed = 0;
                 irq = true;
             }
             via->t2_counter--;

@@ -43,12 +43,41 @@ volatile bool reset;
 // vias[1]: VIA #1 ($Cn80-$Cn8F)
 static via6522_t vias[2];
 
+_Static_assert(sizeof(via6522_t) == 24, "via6522_t size must be 24 bytes");
+_Static_assert(offsetof(via6522_t, t1_counter) == 14, "t1_counter offset must be 14");
+_Static_assert(offsetof(via6522_t, timer_running) == 17, "timer_running offset must be 17");
+_Static_assert(offsetof(via6522_t, t2_counter) == 20, "t2_counter offset must be 20");
+_Static_assert(offsetof(via6522_t, t2_armed) == 23, "t2_armed offset must be 23");
+
 // 4 Audio Event Queues (Core 1 -> Core 0)
 // Reserved for 2 Mockingboards (4 AY chips); currently MB#0 uses queues 0 and 1
 audio_queue_t audio_queues[NUM_AUDIO_QUEUES];
 
 // AY register address latch state for each VIA (R0-R15)
 static uint8_t ay_selected_reg[2];
+
+// AY-3-8913 register bit masks (R0-R15)
+static const uint8_t ay_reg_mask[16] = {
+    0xFF, // R0: Channel A Tone Period Fine (8-bit)
+    0x0F, // R1: Channel A Tone Period Coarse (4-bit)
+    0xFF, // R2: Channel B Tone Period Fine (8-bit)
+    0x0F, // R3: Channel B Tone Period Coarse (4-bit)
+    0xFF, // R4: Channel C Tone Period Fine (8-bit)
+    0x0F, // R5: Channel C Tone Period Coarse (4-bit)
+    0x1F, // R6: Noise Period (5-bit)
+    0xFF, // R7: Enable / Mixer (8-bit)
+    0x1F, // R8: Channel A Amplitude / Mode (5-bit)
+    0x1F, // R9: Channel B Amplitude / Mode (5-bit)
+    0x1F, // R10: Channel C Amplitude / Mode (5-bit)
+    0xFF, // R11: Envelope Period Fine (8-bit)
+    0xFF, // R12: Envelope Period Coarse (8-bit)
+    0x0F, // R13: Envelope Shape / Cycle (4-bit)
+    0x00, // R14: I/O Port A (not connected on AY-3-8913)
+    0x00  // R15: I/O Port B (not connected on AY-3-8913)
+};
+
+// AY register shadow state for each VIA (2 VIAs x 16 registers)
+static uint8_t ay_regs[2][16];
 
 static __always_inline void update_irq(void) {
   bool assert_irq = false;
@@ -67,21 +96,14 @@ static void __time_critical_func(handler)(bool asserted) {
     for (int i = 0; i < 2; i++) {
       via6522_reset(&vias[i]);
       ay_selected_reg[i] = 0;
+      for (int r = 0; r < 16; r++) {
+        ay_regs[i][r] = 0;
+      }
     }
   } else {
     reset = true;
   }
 }
-
-_Static_assert(sizeof(via6522_t) == 24, "via6522_t size must be 24 bytes");
-_Static_assert(offsetof(via6522_t, t1_counter) == 14,
-               "t1_counter offset must be 14");
-_Static_assert(offsetof(via6522_t, timer_running) == 17,
-               "timer_running offset must be 17");
-_Static_assert(offsetof(via6522_t, t2_counter) == 20,
-               "t2_counter offset must be 20");
-_Static_assert(offsetof(via6522_t, t2_running) == 23,
-               "t2_running offset must be 23");
 
 static __always_inline uint32_t process_2via_t1_tick(via6522_t *v) {
   uint32_t ev;
@@ -119,19 +141,16 @@ static __always_inline uint32_t process_2via_t1_tick(via6522_t *v) {
 static __always_inline void handle_t1_via_underflow(via6522_t *via,
                                                     bool *irq_updated) {
   if (via->acr & 0x40) {
-    // Free-running mode: reload counter from latch and set IFR6
     via->ifr |= 0x40;
-    via->t1_counter = via->t1_latch;
     *irq_updated = true;
   } else {
-    // One-shot mode: set IFR6 only on first underflow
     if (!via->t1_underflowed) {
       via->ifr |= 0x40;
       via->t1_underflowed = true;
       *irq_updated = true;
     }
-    // Counter is already wrapped to 0xFFFF by subs/strh
   }
+  via->t1_counter = via->t1_latch;
 }
 
 static __always_inline void handle_t1_events(uint32_t ev) {
@@ -152,28 +171,25 @@ static __always_inline void handle_t1_events(uint32_t ev) {
 
 static __always_inline uint32_t process_2via_t2_tick(via6522_t *v) {
   uint32_t ev;
-  uint32_t tmp;
   uint32_t cnt;
   via6522_t *ptr = v;
 
   __asm__ volatile(
       "movs   %[ev], #0\n\t"
       // --- VIA 0 ---
-      "ldrb   %[tmp], [%[ptr], #23]\n\t"
       "ldrh   %[cnt], [%[ptr], #20]\n\t"
-      "subs   %[cnt], %[cnt], %[tmp]\n\t"
+      "subs   %[cnt], %[cnt], #1\n\t"
       "strh   %[cnt], [%[ptr], #20]\n\t"
       "adcs   %[ev], %[ev]\n\t"
       // --- VIA 1 ---
       "adds   %[ptr], #24\n\t"
-      "ldrb   %[tmp], [%[ptr], #23]\n\t"
       "ldrh   %[cnt], [%[ptr], #20]\n\t"
-      "subs   %[cnt], %[cnt], %[tmp]\n\t"
+      "subs   %[cnt], %[cnt], #1\n\t"
       "strh   %[cnt], [%[ptr], #20]\n\t"
       "adcs   %[ev], %[ev]\n\t"
       // --- Restore ptr ---
       "subs   %[ptr], #24\n\t"
-      : [ev] "=&l"(ev), [tmp] "=&l"(tmp), [cnt] "=&l"(cnt), [ptr] "+l"(ptr)
+      : [ev] "=&l"(ev), [cnt] "=&l"(cnt), [ptr] "+l"(ptr)
       :
       : "cc", "memory");
 
@@ -182,9 +198,9 @@ static __always_inline uint32_t process_2via_t2_tick(via6522_t *v) {
 
 static __always_inline void handle_t2_via_underflow(via6522_t *via,
                                                     bool *irq_updated) {
-  if (!via->t2_underflowed) {
+  if (via->t2_armed) {
     via->ifr |= 0x20;
-    via->t2_underflowed = true;
+    via->t2_armed = 0;
     *irq_updated = true;
   }
 }
@@ -232,12 +248,22 @@ static __always_inline void handle_ay_orb_write(via6522_t *target_via,
                                                 uint8_t data) {
   uint8_t ctrl = data & 0x07;
   int via_idx = target_via - vias;
-  if (ctrl == 0x07) {
+  if (ctrl == 0x07) { // LATCH
     ay_selected_reg[via_idx] = target_via->ora & 0x0F;
-  } else if (ctrl == 0x06) {
-    audio_queue_push(&audio_queues[via_idx], ay_selected_reg[via_idx],
-                     target_via->ora);
-  } else if (ctrl == 0x00) {
+  } else if (ctrl == 0x06) { // WRITE
+    uint8_t reg = ay_selected_reg[via_idx];
+    ay_regs[via_idx][reg] = target_via->ora & ay_reg_mask[reg];
+    audio_queue_push(&audio_queues[via_idx], reg, target_via->ora);
+  } else if (ctrl == 0x05) { // READ
+    uint8_t reg = ay_selected_reg[via_idx];
+    target_via->in_a = ay_regs[via_idx][reg];
+  } else if (ctrl == 0x04) { // INACTIVE
+    target_via->in_a = 0xFF;
+  } else if (ctrl == 0x00) { // RESET
+    for (int r = 0; r < 16; r++) {
+      ay_regs[via_idx][r] = 0;
+    }
+    target_via->in_a = 0xFF;
     audio_queue_push_reset(&audio_queues[via_idx]);
   }
 }
@@ -246,6 +272,9 @@ static void mb_init(void) {
   for (int i = 0; i < 2; i++) {
     via6522_init(&vias[i]);
     ay_selected_reg[i] = 0;
+    for (int r = 0; r < 16; r++) {
+      ay_regs[i][r] = 0;
+    }
   }
   for (int i = 0; i < NUM_AUDIO_QUEUES; i++) {
     audio_queue_init(&audio_queues[i]);

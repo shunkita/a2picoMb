@@ -77,7 +77,7 @@ typedef struct {
     uint16_t t2_latch;
     uint16_t t2_counter;
     bool     t2_underflowed;
-    uint8_t  t2_running; // 0 or 1: actual step per tick
+    uint8_t  t2_armed;   // 1 if armed to trigger IFR5 on underflow, 0 if unarmed
 } via6522_t;
 
 typedef via6522_t via_t;
