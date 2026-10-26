@@ -13,10 +13,10 @@ cd "$ROOT_DIR"
 
 VERSION="${1:-}"
 
-echo -e "${BLUE}${BOLD}===> [1/3] Configuring CMake (enforcing a2pico2litew / Release)...${NC}"
+echo -e "${BLUE}${BOLD}===> [1/3] Configuring CMake (enforcing a2pico2 / Release)...${NC}"
 CMAKE_ARGS=(
     -B build
-    -DPICO_BOARD=a2pico2litew
+    -DPICO_BOARD=a2pico2
     -DCMAKE_BUILD_TYPE=Release
 )
 

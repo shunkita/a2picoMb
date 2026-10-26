@@ -4,9 +4,13 @@ cmake_minimum_required(VERSION 3.13...3.27)
 include(FetchContent)
 FetchContent_Declare(a2pico
         GIT_REPOSITORY https://github.com/oliverschmidt/a2pico.git
-        GIT_TAG 3ec8accb111a1f5c9e13d8246eeea78cbb7154eb
+        GIT_TAG 2026-10-24
         )
 FetchContent_MakeAvailable(a2pico)
+
+if (NOT DEFINED PICO_BOARD)
+    set(PICO_BOARD "a2pico2" CACHE STRING "Target board" FORCE)
+endif ()
 
 if (NOT DEFINED PICO_SDK_PATH AND EXISTS "/Users/oshuno/pico/pico-sdk-2.2.0")
     set(PICO_SDK_PATH "/Users/oshuno/pico/pico-sdk-2.2.0" CACHE PATH "Path to SDK" FORCE)
@@ -22,10 +26,8 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
 
-# Output binary naming scheme following Oliver Schmidt's convention:
-# <project>_A2Pico2LiteW_<version> (Oliver Schmidt uses release date YYYY-MM-DD)
-set(VERSION "2026-10-17" CACHE STRING "Firmware release date/version" FORCE)
-set(TARGET_NAME "${PROJECT_NAME}_A2Pico2LiteW_${VERSION}")
+set(VERSION "2026-10-26" CACHE STRING "Firmware release date/version" FORCE)
+set(TARGET_NAME "${PROJECT_NAME}_${VERSION}")
 
 add_executable(${TARGET_NAME})
 pico_add_extra_outputs(${TARGET_NAME})

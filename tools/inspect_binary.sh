@@ -55,7 +55,10 @@ fi
 # 3. Resolve MCU Module Description
 MCU_MODULE_DESC="Raspberry Pi Pico 2 (RP2350A)"
 BOARD_COMPAT_NOTE=""
-if [ "$BOARD_DEF" = "a2pico2litew" ]; then
+if [ "$BOARD_DEF" = "a2pico2" ]; then
+    MCU_MODULE_DESC="Raspberry Pi Pico 2 / Pico 2 W (RP2350 Unified)"
+    BOARD_COMPAT_NOTE=" (Unified A2Pico2 / Lite W)"
+elif [ "$BOARD_DEF" = "a2pico2litew" ]; then
     if [ "$TRANSPORT_VAL" = "ETHER" ]; then
         MCU_MODULE_DESC="Raspberry Pi Pico 2 / Pico 2 W (RP2350A)"
         BOARD_COMPAT_NOTE=" (Operable on both Pico 2 and Pico 2 W)"

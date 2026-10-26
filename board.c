@@ -104,12 +104,7 @@ static __always_inline void update_irq(void) {
     }
     mb_diag.irq_line_asserted = assert_irq;
 
-#if DIAG_TEST_A_DISABLE_IRQ
-    // Test A: Physical IRQ drive suppressed (always Hi-Z)
-    a2pico_irq(false);
-#else
     a2pico_irq(assert_irq);
-#endif
   }
 }
 
@@ -327,7 +322,6 @@ static void init_sync_sm(PIO pio, uint sm) {
 
 void __time_critical_func(board)(void) {
   mb_init();
-  a2pico_init();
   init_sync_sm(pio0, SM_SYNC);
 
   a2pico_resethandler(&handler);
@@ -379,12 +373,6 @@ void __time_critical_func(board)(void) {
         } else if (reg == REG_IFR && (data & 0x40) && (target_via->ifr & 0x40)) {
           mb_diag.t1_clear_write_ifr[via_idx]++;
         }
-#if DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
-        if (reg == REG_T1CL && (target_via->ifr & 0x40)) {
-          mb_diag.t1_clear_write_t1cl[via_idx]++;
-          target_via->ifr &= ~0x40;
-        }
-#endif
         via6522_write(target_via, reg, data);
         update_irq();
 

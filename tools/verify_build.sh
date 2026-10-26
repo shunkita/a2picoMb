@@ -29,10 +29,10 @@ if [ -f "$CACHE_FILE" ]; then
     BUILD_TYPE_VAL=$(grep "^CMAKE_BUILD_TYPE:" "$CACHE_FILE" 2>/dev/null | cut -d'=' -f2 || true)
 
     # 1. PICO_BOARD check
-    if [ "$PICO_BOARD_VAL" = "a2pico2litew" ]; then
+    if [ "$PICO_BOARD_VAL" = "a2pico2" ]; then
         echo -e "  ${GREEN}✔ PICO_BOARD         :${NC} ${PICO_BOARD_VAL} (Valid)"
     else
-        echo -e "  ${RED}✘ PICO_BOARD         :${NC} ${PICO_BOARD_VAL:-<not set>} ${RED}(CRITICAL: MUST be 'a2pico2litew')${NC}"
+        echo -e "  ${RED}✘ PICO_BOARD         :${NC} ${PICO_BOARD_VAL:-<not set>} ${RED}(CRITICAL: MUST be 'a2pico2')${NC}"
         HAS_ERROR=1
     fi
 
@@ -87,11 +87,11 @@ else
     fi
 
     # Board check
-    if [ "$BOARD" = "a2pico2litew" ]; then
-        echo -e "  ${GREEN}✔ Board Definition   :${NC} ${BOARD} (Valid: A2Pico2 Lite W CYW43 pins)"
+    if [ "$BOARD" = "a2pico2" ]; then
+        echo -e "  ${GREEN}✔ Board Definition   :${NC} ${BOARD} (Valid: Unified A2Pico2 / Lite W)"
     else
-        echo -e "  ${RED}✘ Board Definition   :${NC} ${BOARD:-<unknown>} ${RED}(CRITICAL: MUST be 'a2pico2litew')${NC}"
-        echo -e "    ${RED}↳ Reason: '${BOARD}' has wrong CYW43 pin mappings and WILL crash Core 0 on boot!${NC}"
+        echo -e "  ${RED}✘ Board Definition   :${NC} ${BOARD:-<unknown>} ${RED}(CRITICAL: MUST be 'a2pico2')${NC}"
+        echo -e "    ${RED}↳ Reason: Board definition MUST be 'a2pico2' for unified firmware!${NC}"
         HAS_ERROR=1
     fi
 
@@ -119,13 +119,13 @@ if [ "$HAS_ERROR" -ne 0 ]; then
     echo -e "${RED}${BOLD}🚨 BUILD VALIDATION FAILED!${NC}"
     echo -e "${RED}このバイナリはハードウェアと互換性がなく、書き込むと起動不能（フリーズ）になります。${NC}"
     echo -e "正しいビルド手順で再構成してください:"
-    echo -e "  ${BOLD}cmake -B build -DPICO_BOARD=a2pico2litew -DCMAKE_BUILD_TYPE=Release${NC}"
+    echo -e "  ${BOLD}cmake -B build -DPICO_BOARD=a2pico2 -DCMAKE_BUILD_TYPE=Release${NC}"
     echo -e "  ${BOLD}cmake --build build -j8${NC}"
     echo -e "${BOLD}======================================================================${NC}"
     exit 1
 else
     echo -e "${GREEN}${BOLD}✅ BUILD VALIDATION PASSED!${NC}"
-    echo -e "${GREEN}ファームウェアは a2pico2litew / Release 構成で正常に生成されています。${NC}"
+    echo -e "${GREEN}ファームウェアは a2pico2 / Release 構成で正常に生成されています。${NC}"
     echo -e "${BOLD}======================================================================${NC}"
     exit 0
 fi

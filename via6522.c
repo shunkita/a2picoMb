@@ -99,9 +99,6 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
     case REG_T1CL: // $04
         // 6522 spec: writes to T1C-L only update low-order latch
         via->t1_latch = (via->t1_latch & 0xFF00) | data;
-#if DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
-        via->ifr &= ~0x40;
-#endif
         break;
 
     case REG_T1CH: // $05
