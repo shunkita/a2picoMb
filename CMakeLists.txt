@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.13...3.27)
 include(FetchContent)
 FetchContent_Declare(a2pico
         GIT_REPOSITORY https://github.com/oliverschmidt/a2pico.git
-        GIT_TAG main
+        GIT_TAG 3ec8accb111a1f5c9e13d8246eeea78cbb7154eb
         )
 FetchContent_MakeAvailable(a2pico)
 

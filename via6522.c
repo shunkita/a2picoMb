@@ -26,6 +26,7 @@ SOFTWARE.
 
 #include <a2pico.h>
 #include "via6522.h"
+#include "board.h"
 
 void via6522_init(via6522_t *via) {
     via->ora = 0;
@@ -75,78 +76,6 @@ void via6522_reset(via6522_t *via) {
     via->t2_armed = 0;
 }
 
-uint8_t __time_critical_func(via6522_read)(via6522_t *via, uint8_t reg) {
-    switch (reg & 0x0F) {
-    case REG_ORB: // $00
-        // Port B: Output bits return ORB latch; Input bits return pin level (in_b)
-        // Handshake: reading ORB clears CB1/CB2 flags in IFR
-        via->ifr &= ~0x18; // clear bit 4 (CB1), bit 3 (CB2)
-        return (via->orb & via->ddrb) | (via->in_b & ~via->ddrb);
-
-    case REG_ORA: // $01
-        // Port A with handshake: Output bits return ORA latch; Input bits return pin level (in_a)
-        // Handshake: reading ORA clears CA1/CA2 flags in IFR
-        via->ifr &= ~0x03; // clear bit 1 (CA1), bit 0 (CA2)
-        return (via->ora & via->ddra) | (via->in_a & ~via->ddra);
-
-    case REG_DDRB: // $02
-        return via->ddrb;
-
-    case REG_DDRA: // $03
-        return via->ddra;
-
-    case REG_T1CL: // $04
-        // 6522 spec: reading T1C-L clears IFR bit 6 (Timer 1 flag)
-        via->ifr &= ~0x40;
-        return via->t1_counter & 0xFF;
-
-    case REG_T1CH: // $05
-        // 6522 spec: reading T1C-H returns high byte without clearing IFR bit 6
-        return (via->t1_counter >> 8) & 0xFF;
-
-    case REG_T1LL: // $06
-        // 6522 spec: reading T1L-L returns low-order latch
-        return via->t1_latch & 0xFF;
-
-    case REG_T1LH: // $07
-        // 6522 spec: reading T1L-H returns high-order latch
-        return (via->t1_latch >> 8) & 0xFF;
-
-    case REG_T2CL: // $08
-        // Reading T2CL clears IFR bit 5 (Timer 2 flag)
-        via->ifr &= ~0x20;
-        return via->t2_counter & 0xFF;
-
-    case REG_T2CH: // $09
-        return (via->t2_counter >> 8) & 0xFF;
-
-    case REG_SR: // $0A
-        via->ifr &= ~0x04; // clear bit 2 (SR)
-        return via->sr;
-
-    case REG_ACR: // $0B
-        return via->acr;
-
-    case REG_PCR: // $0C
-        return via->pcr;
-
-    case REG_IFR: // $0D
-        // Bit 7 is IRQ summary flag: set if any enabled interrupt flag is 1
-        return (((via->ifr & via->ier & 0x7F) != 0) ? 0x80 : 0x00) | (via->ifr & 0x7F);
-
-    case REG_IER: // $0E
-        // Bit 7 is always 1 on read
-        return via->ier | 0x80;
-
-    case REG_ORA_NH: // $0F
-        // Port A without handshake: no IFR flags cleared
-        return (via->ora & via->ddra) | (via->in_a & ~via->ddra);
-
-    default:
-        return 0xFF;
-    }
-}
-
 void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t data) {
     switch (reg & 0x0F) {
     case REG_ORB: // $00
@@ -170,6 +99,9 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
     case REG_T1CL: // $04
         // 6522 spec: writes to T1C-L only update low-order latch
         via->t1_latch = (via->t1_latch & 0xFF00) | data;
+#if DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
+        via->ifr &= ~0x40;
+#endif
         break;
 
     case REG_T1CH: // $05
@@ -191,8 +123,9 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
         break;
 
     case REG_T1LH: // $07
-        // 6522 spec: writes to T1L-H update high-order latch and clear IFR bit 6
+        // 6522 spec: writes to T1L-H update high-order latch, clear IFR bit 6, and reset one-shot state
         via->t1_latch = (via->t1_latch & 0x00FF) | ((uint16_t)data << 8);
+        via->t1_underflowed = false;
         via->ifr &= ~0x40;
         break;
 

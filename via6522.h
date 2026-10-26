@@ -84,11 +84,70 @@ typedef via6522_t via_t;
 
 void via6522_init(via6522_t *via);
 void via6522_reset(via6522_t *via);
-uint8_t via6522_read(via6522_t *via, uint8_t reg);
 void via6522_write(via6522_t *via, uint8_t reg, uint8_t data);
 bool via6522_sync_tick(via6522_t *via);
 static inline bool via6522_get_irq(const via6522_t *via) {
     return (via->ifr & via->ier & 0x7F) != 0;
+}
+
+static __always_inline uint8_t via6522_read(via6522_t *via, uint8_t reg) {
+    switch (reg & 0x0F) {
+    case REG_ORB: // $00
+        via->ifr &= ~0x18; // clear bit 4 (CB1), bit 3 (CB2)
+        return (via->orb & via->ddrb) | (via->in_b & ~via->ddrb);
+
+    case REG_ORA: // $01
+        via->ifr &= ~0x03; // clear bit 1 (CA1), bit 0 (CA2)
+        return (via->ora & via->ddra) | (via->in_a & ~via->ddra);
+
+    case REG_DDRB: // $02
+        return via->ddrb;
+
+    case REG_DDRA: // $03
+        return via->ddra;
+
+    case REG_T1CL: // $04
+        via->ifr &= ~0x40;
+        return via->t1_counter & 0xFF;
+
+    case REG_T1CH: // $05
+        return (via->t1_counter >> 8) & 0xFF;
+
+    case REG_T1LL: // $06
+        return via->t1_latch & 0xFF;
+
+    case REG_T1LH: // $07
+        return (via->t1_latch >> 8) & 0xFF;
+
+    case REG_T2CL: // $08
+        via->ifr &= ~0x20;
+        return via->t2_counter & 0xFF;
+
+    case REG_T2CH: // $09
+        return (via->t2_counter >> 8) & 0xFF;
+
+    case REG_SR: // $0A
+        via->ifr &= ~0x04; // clear bit 2 (SR)
+        return via->sr;
+
+    case REG_ACR: // $0B
+        return via->acr;
+
+    case REG_PCR: // $0C
+        return via->pcr;
+
+    case REG_IFR: // $0D
+        return (((via->ifr & via->ier & 0x7F) != 0) ? 0x80 : 0x00) | (via->ifr & 0x7F);
+
+    case REG_IER: // $0E
+        return via->ier | 0x80;
+
+    case REG_ORA_NH: // $0F
+        return (via->ora & via->ddra) | (via->in_a & ~via->ddra);
+
+    default:
+        return 0xFF;
+    }
 }
 
 #endif // _VIA6522_H

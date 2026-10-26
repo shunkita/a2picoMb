@@ -38,6 +38,9 @@ SOFTWARE.
 
 volatile bool reset;
 
+// Diagnostic state for Test B and IRQ verification
+mb_diag_t mb_diag = {0};
+
 // Flat 2 VIA instances (MockingBoard #0 only):
 // vias[0]: VIA #0 ($Cn00-$Cn0F)
 // vias[1]: VIA #1 ($Cn80-$Cn8F)
@@ -87,12 +90,33 @@ static __always_inline void update_irq(void) {
       break;
     }
   }
-  a2pico_irq(assert_irq);
+
+  mb_diag.last_ifr[0] = vias[0].ifr;
+  mb_diag.last_ier[0] = vias[0].ier;
+  mb_diag.last_ifr[1] = vias[1].ifr;
+  mb_diag.last_ier[1] = vias[1].ier;
+
+  if (assert_irq != mb_diag.irq_line_asserted) {
+    if (assert_irq) {
+      mb_diag.irq_assert_count++;
+    } else {
+      mb_diag.irq_deassert_count++;
+    }
+    mb_diag.irq_line_asserted = assert_irq;
+
+#if DIAG_TEST_A_DISABLE_IRQ
+    // Test A: Physical IRQ drive suppressed (always Hi-Z)
+    a2pico_irq(false);
+#else
+    a2pico_irq(assert_irq);
+#endif
+  }
 }
 
 static void __time_critical_func(handler)(bool asserted) {
   if (asserted) {
     a2pico_irq(false);
+    mb_diag.irq_line_asserted = false;
     for (int i = 0; i < 2; i++) {
       via6522_reset(&vias[i]);
       ay_selected_reg[i] = 0;
@@ -140,9 +164,10 @@ static __always_inline uint32_t process_2via_t1_tick(via6522_t *v) {
 
 static __always_inline void handle_t1_via_underflow(via6522_t *via,
                                                     bool *irq_updated) {
+  int via_idx = via - vias;
+  mb_diag.t1_underflow_count[via_idx]++;
   if (via->acr & 0x40) {
     via->ifr |= 0x40;
-    via->t1_counter = via->t1_latch;
     *irq_updated = true;
   } else {
     if (!via->t1_underflowed) {
@@ -151,6 +176,7 @@ static __always_inline void handle_t1_via_underflow(via6522_t *via,
       *irq_updated = true;
     }
   }
+  via->t1_counter = via->t1_latch;
 }
 
 static __always_inline void handle_t1_events(uint32_t ev) {
@@ -244,6 +270,14 @@ static __always_inline uint32_t mb_getaddr(void) {
   return pio0->rxf[SM_ADDR];
 }
 
+static __always_inline uint32_t mb_getdata(void) {
+  uint retry = 256;
+  while (pio0->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_WRITE)) && --retry) {
+    tight_loop_contents();
+  }
+  return pio0->rxf[SM_WRITE];
+}
+
 static __always_inline void handle_ay_orb_write(via6522_t *target_via,
                                                 uint8_t data) {
   uint8_t ctrl = data & 0x07;
@@ -315,23 +349,42 @@ void __time_critical_func(board)(void) {
       if ((offset & 0x70) != 0) {
         if (!read) {
           // Drain and discard write data to prevent PIO RX FIFO deadlock
-          a2pico_getdata();
+          mb_getdata();
         }
         continue;
       }
 
       // Valid offsets guaranteed: $Cn00-$Cn0F (VIA 0) or $Cn80-$Cn8F (VIA 1)
-      via6522_t *target_via = &vias[(offset >> 7) & 1];
+      int via_idx = (offset >> 7) & 1;
+      via6522_t *target_via = &vias[via_idx];
       uint8_t reg = offset & 0x0F;
 
       // ---- IOSEL Read ----
       if (read) {
-        a2pico_putdata(via6522_read(target_via, reg));
+        uint8_t val = via6522_read(target_via, reg);
+        a2pico_putdata(val);
+
+        if (reg == REG_T1CL) {
+          mb_diag.t1_clear_read_t1cl[via_idx]++;
+        }
         update_irq();
       }
       // ---- IOSEL Write ----
       else {
-        uint32_t data = a2pico_getdata();
+        uint32_t data = mb_getdata();
+        if (reg == REG_T1CH && (target_via->ifr & 0x40)) {
+          mb_diag.t1_clear_write_t1ch[via_idx]++;
+        } else if (reg == REG_T1LH && (target_via->ifr & 0x40)) {
+          mb_diag.t1_clear_write_t1lh[via_idx]++;
+        } else if (reg == REG_IFR && (data & 0x40) && (target_via->ifr & 0x40)) {
+          mb_diag.t1_clear_write_ifr[via_idx]++;
+        }
+#if DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
+        if (reg == REG_T1CL && (target_via->ifr & 0x40)) {
+          mb_diag.t1_clear_write_t1cl[via_idx]++;
+          target_via->ifr &= ~0x40;
+        }
+#endif
         via6522_write(target_via, reg, data);
         update_irq();
 
@@ -346,7 +399,7 @@ void __time_critical_func(board)(void) {
     }
     // DEVSEL or IOSTRB Write
     else {
-      a2pico_getdata();
+      mb_getdata();
     }
   }
 }

@@ -35,6 +35,36 @@ SOFTWARE.
 
 extern volatile bool reset;
 
+// ============================================================================
+// Diagnostic Configuration for IRQ / IFR Investigation
+// ============================================================================
+// Test A: Suppress physical IRQ assertion (force Hi-Z on slot IRQ pin)
+// Set to 1 to test whether Ultima IV proceeds without IRQ line hold
+#ifndef DIAG_TEST_A_DISABLE_IRQ
+#define DIAG_TEST_A_DISABLE_IRQ 0
+#endif
+
+// Test B (Option): Clear IFR Timer 1 bit on Write to T1C-L (REG_T1CL)
+#ifndef DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
+#define DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR 0
+#endif
+
+typedef struct {
+    volatile uint32_t t1_underflow_count[2];
+    volatile uint32_t t1_clear_read_t1cl[2];
+    volatile uint32_t t1_clear_write_t1cl[2];
+    volatile uint32_t t1_clear_write_t1ch[2];
+    volatile uint32_t t1_clear_write_t1lh[2];
+    volatile uint32_t t1_clear_write_ifr[2];
+    volatile uint32_t irq_assert_count;
+    volatile uint32_t irq_deassert_count;
+    volatile uint8_t  last_ifr[2];
+    volatile uint8_t  last_ier[2];
+    volatile bool     irq_line_asserted;
+} mb_diag_t;
+
+extern mb_diag_t mb_diag;
+
 void board(void);
 
 #endif

@@ -43,12 +43,22 @@ void main(void) {
     busctrl_hw->priority = BUSCTRL_BUS_PRIORITY_PROC1_BITS;
     multicore_launch_core1(board);
 
-    printf("\n\nA2Pico Mockingboard\n\n");
+    printf("\n\nA2Pico Mockingboard\n");
+#if DIAG_TEST_A_DISABLE_IRQ
+    printf("[DIAG MODE] Test A: Physical IRQ drive DISABLED (force Hi-Z)\n");
+#endif
+#if DIAG_TEST_B_WRITE_T1CL_CLEARS_IFR
+    printf("[DIAG MODE] Test B: Write to T1C-L clears IFR Timer 1 flag ENABLED\n");
+#endif
+    printf("\n");
 
     // Initialize Audio Subsystem (AYUMI & Bluetooth A2DP)
     if (!audio_init()) {
         printf("[AUDIO] Failed to initialize Audio Subsystem\n");
     }
+
+    uint32_t last_diag_time = 0;
+    uint32_t prev_uf0 = 0, prev_uf1 = 0, prev_assert = 0, prev_deassert = 0;
 
     while (true) {
         // Service Audio Subsystem (poll Bluetooth, drain Core 1 queues, update AYUMI)
@@ -57,6 +67,29 @@ void main(void) {
         if (reset) {
             reset = false;
             printf(" RESET ");
+        }
+
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+        if (now - last_diag_time >= 1000) {
+            last_diag_time = now;
+            if (mb_diag.t1_underflow_count[0] != prev_uf0 ||
+                mb_diag.t1_underflow_count[1] != prev_uf1 ||
+                mb_diag.irq_assert_count != prev_assert ||
+                mb_diag.irq_deassert_count != prev_deassert) {
+                prev_uf0 = mb_diag.t1_underflow_count[0];
+                prev_uf1 = mb_diag.t1_underflow_count[1];
+                prev_assert = mb_diag.irq_assert_count;
+                prev_deassert = mb_diag.irq_deassert_count;
+                printf("[DIAG] IRQ_pin:%s (asserts:%lu, deasserts:%lu) | V0(UF:%lu, clrR:%lu, clrW:%lu, IFR:%02x, IER:%02x) | V1(UF:%lu, clrR:%lu, clrW:%lu, IFR:%02x, IER:%02x)\n",
+                       mb_diag.irq_line_asserted ? "LOW(Asserted)" : "Hi-Z",
+                       (unsigned long)mb_diag.irq_assert_count, (unsigned long)mb_diag.irq_deassert_count,
+                       (unsigned long)mb_diag.t1_underflow_count[0], (unsigned long)mb_diag.t1_clear_read_t1cl[0],
+                       (unsigned long)(mb_diag.t1_clear_write_t1ch[0] + mb_diag.t1_clear_write_ifr[0] + mb_diag.t1_clear_write_t1cl[0]),
+                       mb_diag.last_ifr[0], mb_diag.last_ier[0],
+                       (unsigned long)mb_diag.t1_underflow_count[1], (unsigned long)mb_diag.t1_clear_read_t1cl[1],
+                       (unsigned long)(mb_diag.t1_clear_write_t1ch[1] + mb_diag.t1_clear_write_ifr[1] + mb_diag.t1_clear_write_t1cl[1]),
+                       mb_diag.last_ifr[1], mb_diag.last_ier[1]);
+            }
         }
     }
 }
