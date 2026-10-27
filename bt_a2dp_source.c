@@ -34,7 +34,16 @@ SOFTWARE.
 #include "classic/a2dp_source.h"
 #include "classic/avdtp_util.h"
 #include "classic/btstack_sbc.h"
+#include <a2pico.h>
 #include "bt_a2dp_source.h"
+
+static inline void bt_a2dp_set_led(bool on) {
+    if (a2pico_led() >= 0) {
+        gpio_put(a2pico_led(), on ? 1 : 0);
+    } else if (a2pico_radio()) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on ? 1 : 0);
+    }
+}
 
 #define AUDIO_TIMEOUT_MS 20
 #define SBC_STORAGE_SIZE 1030
@@ -350,7 +359,7 @@ static void a2dp_source_packet_handler(uint8_t packet_type, uint16_t channel, ui
         scan_active = false;
         gap_inquiry_stop();
         a2dp_timer_start(&media_tracker);
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
+        bt_a2dp_set_led(true);
         break;
 
     case A2DP_SUBEVENT_STREAMING_CAN_SEND_MEDIA_PACKET_NOW:
@@ -365,7 +374,7 @@ static void a2dp_source_packet_handler(uint8_t packet_type, uint16_t channel, ui
         media_tracker.a2dp_cid = 0;
         target_connected = false;
         btstack_run_loop_remove_timer(&media_tracker.audio_timer);
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+        bt_a2dp_set_led(false);
         a2dp_start_scanning();
         break;
 
@@ -378,13 +387,23 @@ bool bt_a2dp_source_init(bt_a2dp_pcm_callback_t callback) {
     pcm_data_callback = callback;
     memset(&media_tracker, 0, sizeof(media_tracker));
 
-    // Initialize CYW43 architecture
+    // 1. Initialize and turn off direct GPIO LED (A2Pico2 WE / Standard)
+    if (a2pico_led() >= 0) {
+        gpio_init(a2pico_led());
+        gpio_set_dir(a2pico_led(), GPIO_OUT);
+        gpio_put(a2pico_led(), 0);
+    }
+
+    // 2. Initialize CYW43 architecture
     if (cyw43_arch_init()) {
         printf("[BT] Failed to initialize cyw43_arch\n");
         return false;
     }
-    // Ensure LED is OFF initially
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+
+    // 3. Turn off radio LED initially (A2Pico2 Lite W)
+    if (a2pico_radio()) {
+        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
+    }
 
     // Initialize BTstack L2CAP & SDP
     l2cap_init();

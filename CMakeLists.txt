@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.13...3.27)
 include(FetchContent)
 FetchContent_Declare(a2pico
         GIT_REPOSITORY https://github.com/oliverschmidt/a2pico.git
-        GIT_TAG 2026-10-24
+        GIT_TAG main
         )
 FetchContent_MakeAvailable(a2pico)
 
@@ -26,7 +26,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
 
-set(VERSION "2026-10-26" CACHE STRING "Firmware release date/version" FORCE)
+set(VERSION "2026-10-27" CACHE STRING "Firmware release date/version" FORCE)
 set(TARGET_NAME "${PROJECT_NAME}_${VERSION}")
 
 add_executable(${TARGET_NAME})
