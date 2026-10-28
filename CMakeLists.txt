@@ -26,7 +26,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
 
-set(VERSION "2026-10-27" CACHE STRING "Firmware release date/version" FORCE)
+set(VERSION "2026-10-28" CACHE STRING "Firmware release date/version" FORCE)
 set(TARGET_NAME "${PROJECT_NAME}_${VERSION}")
 
 add_executable(${TARGET_NAME})
@@ -66,4 +66,5 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
         USE_SDIOIT=0
         PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000
         CYW43_WL_GPIO_LED_PIN=0
+        CYW43_PIO_CLOCK_DIV=3
         )
