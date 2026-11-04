@@ -46,16 +46,19 @@ target_link_libraries(a2pico_mb_core PUBLIC
 add_executable(${TARGET_NAME})
 pico_add_extra_outputs(${TARGET_NAME})
 
-target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(${TARGET_NAME} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/infra
+        )
 
 pico_enable_stdio_uart(${TARGET_NAME} 0)
 pico_enable_stdio_usb(${TARGET_NAME} 1)
 
 target_sources(${TARGET_NAME} PRIVATE
-        audio.c
         board.c
-        bt_a2dp_source.c
         main.c
+        infra/audio.c
+        infra/bt_a2dp_source.c
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
