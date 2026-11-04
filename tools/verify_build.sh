@@ -113,6 +113,32 @@ else
     fi
 fi
 
+# -----------------------------------------------------------------------------
+# Check 3: Core 1 Bus Read Critical Path Validation (Timing Budget Gate)
+# -----------------------------------------------------------------------------
+CRITICAL_PATH_SCRIPT="${SCRIPT_DIR}/inspect_critical_path.sh"
+if [ -x "$CRITICAL_PATH_SCRIPT" ]; then
+    echo -e "${BLUE}▶ Checking Core 1 Bus Read Critical Path Timing Budget...${NC}"
+
+    # Target ELF for critical path inspection
+    TARGET_ELF_CP=""
+    if [ -n "${TARGET_UF2}" ]; then
+        TARGET_ELF_CP="${TARGET_UF2%.uf2}.elf"
+    fi
+    if [ -z "$TARGET_ELF_CP" ] || [ ! -f "$TARGET_ELF_CP" ]; then
+        TARGET_ELF_CP=$(find "${ROOT_DIR}/build" -maxdepth 1 -name "*.elf" -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -n 1 || true)
+    fi
+
+    if [ -n "$TARGET_ELF_CP" ] && [ -f "$TARGET_ELF_CP" ]; then
+        if ! "${CRITICAL_PATH_SCRIPT}" "$TARGET_ELF_CP" --warn-cycles 50 --deadline-cycles 70; then
+            echo -e "  ${RED}✘ Core 1 Critical Path Validation FAILED! (Exceeded 70 cycles / 350ns budget)${NC}"
+            HAS_ERROR=1
+        fi
+    else
+        echo -e "  ${YELLOW}⚠ ELF binary not found for critical path analysis. Skipping timing gate.${NC}"
+    fi
+fi
+
 echo -e "${BOLD}======================================================================${NC}"
 
 if [ "$HAS_ERROR" -ne 0 ]; then
