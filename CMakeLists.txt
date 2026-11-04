@@ -12,10 +12,6 @@ if (NOT DEFINED PICO_BOARD)
     set(PICO_BOARD "a2pico2" CACHE STRING "Target board" FORCE)
 endif ()
 
-if (NOT DEFINED PICO_SDK_PATH AND EXISTS "/Users/oshuno/pico/pico-sdk-2.2.0")
-    set(PICO_SDK_PATH "/Users/oshuno/pico/pico-sdk-2.2.0" CACHE PATH "Path to SDK" FORCE)
-endif ()
-
 include(pico_sdk_import.cmake)
 
 set(PROJECT_NAME a2picoMb)
