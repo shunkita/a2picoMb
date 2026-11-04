@@ -29,6 +29,24 @@ endif ()
 set(VERSION "2026-10-28" CACHE STRING "Firmware release date/version" FORCE)
 set(TARGET_NAME "${PROJECT_NAME}_${VERSION}")
 
+# Mockingboard core emulation library (hardware & bus independent)
+add_library(a2pico_mb_core STATIC
+        mb_core/src/mb_core.c
+        mb_core/src/via6522.c
+        mb_core/src/ayumi.c
+        mb_core/src/ay_audio.c
+        )
+
+target_include_directories(a2pico_mb_core
+        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/mb_core/include
+        )
+
+target_link_libraries(a2pico_mb_core PUBLIC
+        pico_stdlib
+        m
+        )
+
+# Main firmware executable
 add_executable(${TARGET_NAME})
 pico_add_extra_outputs(${TARGET_NAME})
 
@@ -39,15 +57,13 @@ pico_enable_stdio_usb(${TARGET_NAME} 1)
 
 target_sources(${TARGET_NAME} PRIVATE
         audio.c
-        ay_audio.c
-        ayumi.c
         board.c
         bt_a2dp_source.c
         main.c
-        via6522.c
         )
 
 target_link_libraries(${TARGET_NAME} PRIVATE
+        a2pico_mb_core
         a2pico
         pico_multicore
         pico_stdlib

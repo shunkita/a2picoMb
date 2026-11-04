@@ -438,7 +438,7 @@ def analyze(target_file, clock_mhz=200, warn_cycles=50, deadline_cycles=70):
 
     # Case B: Inlined dispatch (10-26 version)
     else:
-        targets = parse_tbh_table(instructions, ordered_addrs, dispatch_table_addr)
+        targets = parse_tbb_table(instructions, ordered_addrs, dispatch_table_addr) if is_tbb else parse_tbh_table(instructions, ordered_addrs, dispatch_table_addr)
         targets[0] = reg_orb_target
 
         for reg in range(16):

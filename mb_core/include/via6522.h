@@ -30,6 +30,14 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef __always_inline
+#if defined(__GNUC__) || defined(__clang__)
+#define __always_inline inline __attribute__((always_inline))
+#else
+#define __always_inline inline
+#endif
+#endif
+
 // 6522 Register Offsets
 #define REG_ORB    0x00
 #define REG_ORA    0x01
