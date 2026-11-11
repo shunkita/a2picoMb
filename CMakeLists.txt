@@ -18,6 +18,8 @@ set(PROJECT_NAME a2picoMb)
 project(${PROJECT_NAME} C CXX ASM)
 pico_sdk_init()
 
+add_subdirectory(mb_core)
+
 if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
@@ -25,24 +27,6 @@ endif ()
 set(VERSION "2026-10-28" CACHE STRING "Firmware release date/version" FORCE)
 set(TARGET_NAME "${PROJECT_NAME}_${VERSION}")
 
-# Mockingboard core emulation library (hardware & bus independent)
-add_library(a2pico_mb_core STATIC
-        mb_core/src/mb_core.c
-        mb_core/src/via6522.c
-        mb_core/src/ayumi.c
-        mb_core/src/ay_audio.c
-        )
-
-target_include_directories(a2pico_mb_core
-        PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/mb_core/include
-        )
-
-target_link_libraries(a2pico_mb_core PUBLIC
-        pico_stdlib
-        m
-        )
-
-# Main firmware executable
 add_executable(${TARGET_NAME})
 pico_add_extra_outputs(${TARGET_NAME})
 
