@@ -24,9 +24,14 @@ SOFTWARE.
 
 */
 
-#include <a2pico.h>
 #include "via6522.h"
-#include "board.h"
+
+#if defined(PICO_PLATFORM) || defined(PICO_SDK_VERSION_MAJOR)
+#include <pico/platform.h>
+#endif
+#ifndef __time_critical_func
+#define __time_critical_func(name) name
+#endif
 
 void via6522_init(via6522_t *via) {
     via->ora = 0;

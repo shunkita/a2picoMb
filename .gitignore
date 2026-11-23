@@ -12,6 +12,7 @@ build-*/
 .cache/
 .vscode/
 .idea/
+__pycache__/
 
 # Local / Backup
 .git.backup/
@@ -23,3 +24,5 @@ docs/
 scratch/
 mbtest/
 trtest/
+tools/
+test/

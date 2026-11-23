@@ -24,7 +24,7 @@ SOFTWARE.
 
 */
 
-#include "ay_audio.h"
+#include "mb_core.h"
 #include "ayumi.h"
 #include <string.h>
 #include <pico/stdlib.h>
@@ -32,11 +32,11 @@ SOFTWARE.
 #define AYUMI_CLOCK_RATE  1022727.0f
 #define AYUMI_SAMPLE_RATE 44100
 
-static struct ayumi ayumis[NUM_AUDIO_QUEUES];
-static uint8_t ay_regs[NUM_AUDIO_QUEUES][16];
+static struct ayumi ayumis[MB_NUM_QUEUES];
+static uint8_t ay_regs[MB_NUM_QUEUES][16];
 
 void ay_audio_write_reg(uint8_t chip_index, uint8_t reg, uint8_t value) {
-    if (chip_index >= NUM_AUDIO_QUEUES) return;
+    if (chip_index >= MB_NUM_QUEUES) return;
 
     struct ayumi *ay = &ayumis[chip_index];
     uint8_t *regs = ay_regs[chip_index];
@@ -104,7 +104,7 @@ void ay_audio_write_reg(uint8_t chip_index, uint8_t reg, uint8_t value) {
 }
 
 void ay_audio_reset(uint8_t chip_index) {
-    if (chip_index >= NUM_AUDIO_QUEUES) return;
+    if (chip_index >= MB_NUM_QUEUES) return;
 
     struct ayumi *ay = &ayumis[chip_index];
     uint8_t *regs = ay_regs[chip_index];
@@ -119,7 +119,7 @@ void ay_audio_reset(uint8_t chip_index) {
 }
 
 void ay_audio_handle_event(uint8_t chip_index, const ay_event_t *ev) {
-    if (!ev || chip_index >= NUM_AUDIO_QUEUES) return;
+    if (!ev || chip_index >= MB_NUM_QUEUES) return;
 
     if (ev->type == AY_EVENT_REGISTER_WRITE) {
         ay_audio_write_reg(chip_index, ev->reg, ev->value);
@@ -130,11 +130,10 @@ void ay_audio_handle_event(uint8_t chip_index, const ay_event_t *ev) {
 
 void ay_audio_init(void) {
     // Initialize 4 AYUMI instances (Core 0)
-    for (int q = 0; q < NUM_AUDIO_QUEUES; q++) {
+    for (int q = 0; q < MB_NUM_QUEUES; q++) {
         ay_audio_reset(q);
     }
-
-
+    ssi263_set_sample_rate(&mb_ssi263, AYUMI_SAMPLE_RATE);
 }
 
 static uint32_t ay_pcm_call_count = 0;
@@ -163,7 +162,9 @@ void ay_audio_produce_pcm(int16_t *pcm_buffer, int num_samples) {
         t_start = to_us_since_boot(get_absolute_time());
     }
 
-    // Single unified loop: synthesize AY0 & AY1, mix, clip, and store directly into pcm_buffer
+    // Single unified loop: synthesize AY0 & AY1 (and SSI-263A when active), mix, clip, and store into pcm_buffer
+    bool ssi_active = !ssi263_is_silent(&mb_ssi263);
+
     for (int i = 0; i < num_samples; i++) {
         ayumi_process(&ayumis[0]);
         ayumi_remove_dc(&ayumis[0]);
@@ -173,6 +174,12 @@ void ay_audio_produce_pcm(int16_t *pcm_buffer, int num_samples) {
 
         float l = (ayumis[0].left + ayumis[1].left) * 16384.0f;
         float r = (ayumis[0].right + ayumis[1].right) * 16384.0f;
+
+        if (ssi_active) {
+            float speech = ssi263_render_sample(&mb_ssi263) * 30000.0f;
+            l += speech;
+            r += speech;
+        }
 
         if (l > 32767.0f) l = 32767.0f;
         if (l < -32768.0f) l = -32768.0f;
@@ -204,7 +211,7 @@ int16_t ay_audio_get_last_max_amp(void) {
 }
 
 uint8_t ay_audio_get_reg(uint8_t chip_index, uint8_t reg) {
-    if (chip_index >= NUM_AUDIO_QUEUES || reg >= 16) return 0;
+    if (chip_index >= MB_NUM_QUEUES || reg >= 16) return 0;
     return ay_regs[chip_index][reg];
 }
 

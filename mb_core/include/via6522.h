@@ -30,6 +30,14 @@ SOFTWARE.
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef __always_inline
+#if defined(__GNUC__) || defined(__clang__)
+#define __always_inline inline __attribute__((always_inline))
+#else
+#define __always_inline inline
+#endif
+#endif
+
 // 6522 Register Offsets
 #define REG_ORB    0x00
 #define REG_ORA    0x01
@@ -86,6 +94,26 @@ void via6522_init(via6522_t *via);
 void via6522_reset(via6522_t *via);
 void via6522_write(via6522_t *via, uint8_t reg, uint8_t data);
 bool via6522_sync_tick(via6522_t *via);
+// CA1 input edge. Sets IFR bit 1 when the edge matches PCR bit 0 polarity
+// (PCR bit 0 == 0: negative edge, == 1: positive edge). Returns true if IFR was set.
+static inline bool via6522_ca1_edge(via6522_t *via, bool rising) {
+    bool active = rising ? ((via->pcr & 0x01) != 0) : ((via->pcr & 0x01) == 0);
+    if (active) {
+        via->ifr |= 0x02;
+    }
+    return active;
+}
+
+// CA1 level update. *level holds the previous pin level (kept by the caller
+// because via6522_t has a fixed layout). Returns true if IFR bit 1 was set.
+static inline bool via6522_set_ca1(via6522_t *via, bool *level, bool new_level) {
+    if (*level == new_level) {
+        return false;
+    }
+    *level = new_level;
+    return via6522_ca1_edge(via, new_level);
+}
+
 static inline bool via6522_get_irq(const via6522_t *via) {
     return (via->ifr & via->ier & 0x7F) != 0;
 }
