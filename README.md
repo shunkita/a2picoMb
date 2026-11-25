@@ -1,19 +1,31 @@
 # a2picoMb
 
-Mockingboard sound card emulator for the Apple II based on the Raspberry Pi Pico 2 W (RP2350).
-It emulates dual 6522 VIAs and dual AY-3-8910 sound chips, wirelessly streaming synthesized audio to a Bluetooth speaker via A2DP.
+Single-slot Mockingboard sound card emulator for the Apple II based on the Raspberry Pi RP2350 (`a2pico2`).
 
 ## Features
 
-- Mockingboard emulation (2x 6522 VIA, 2x AY-3-8910 PSG)
-- Wireless audio output via Bluetooth A2DP
-- Onboard LED indicator for Bluetooth connection status
+- Single Mockingboard card emulation: 2x 6522 VIA (`$Cn00-$Cn0F`, `$Cn80-$Cn8F`) and 2x AY-3-8913 PSG (`ayumi`, VIA #0 = Left, VIA #1 = Right)
+- SSI-263A speech synthesis (`$Cn40-$Cn7F`, VIA #1 CA1 handshake)
+- Two audio output variants: Bluetooth A2DP Source (`BT`) and USB Audio Class 2.0 (`USB-DEV`)
+
+## Firmware Variants
+
+| Variant | `.uf2` File | Supported Hardware | Audio Output | LED |
+| --- | --- | --- | --- | --- |
+| **BT** | `a2picoMb-BT_<VERSION>.uf2` | Pico 2 W / A2Pico2 Lite W (CYW43 radio required) | Bluetooth A2DP (44.1 kHz stereo SBC) | ON when connected, OFF when disconnected |
+| **USB-DEV** | `a2picoMb-USB-DEV_<VERSION>.uf2` | Pico 2 / A2Pico2 (or Pico 2 W / A2Pico2 Lite W) | USB Audio Class 2.0 stereo input (`48 kHz`, 16-bit) | Not used |
 
 ## How to Use
 
-1. **Flash firmware**: Flash the compiled `.uf2` file onto the Raspberry Pi Pico 2 W.
-2. **Prepare speaker**: Set your Bluetooth speaker to pairing mode.
-3. **Install board**: Insert the a2picoMb card into an expansion slot of your Apple II.
-4. **Power on**: Turn on the Apple II.
-5. **Connection**: Once successfully connected to the Bluetooth speaker, the onboard LED turns on.
-6. **Play**: Launch any Mockingboard-compatible software on the Apple II. Audio will play through the connected Bluetooth speaker.
+### Bluetooth A2DP (`a2picoMb-BT_<VERSION>.uf2`)
+
+1. Flash `a2picoMb-BT_<VERSION>.uf2` to an a2pico2 Lite W or a2pico2 WE and put your Bluetooth speaker in pairing mode.
+2. Insert the card into an Apple II expansion slot and power on.
+3. Wait for the onboard LED to turn on (A2DP connected), then launch Mockingboard software.
+
+### USB Audio Device (`a2picoMb-USB-DEV_<VERSION>.uf2`)
+
+1. Flash `a2picoMb-USB-DEV_<VERSION>.uf2` to an a2pico2 Lite, a2pico2 Lite W or a2pico2 WE.
+2. Insert the card into an Apple II expansion slot, connect the Pico USB port to your host PC, and power on.
+3. Select `A2PicoMb USB Audio (<id>)` (`48 kHz`, 16-bit stereo) as the host audio input.
+4. Launch Mockingboard software on the Apple II.
