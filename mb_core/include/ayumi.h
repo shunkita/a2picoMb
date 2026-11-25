@@ -1,4 +1,10 @@
-/* Author: Peter Sovietov */
+/*
+ * Copyright (c) Peter Sovietov, http://sovietov.com
+ *
+ * Source: https://github.com/true-grue/ayumi
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #ifndef AYUMI_H
 #define AYUMI_H

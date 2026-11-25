@@ -1,25 +1,7 @@
 /*
- * MIT License
+ * Copyright (c) 2026 a2picoMb
  *
- * Copyright (c) 2026 Shunichi Kitahara
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "audio_sink.h"
@@ -128,6 +110,10 @@ static void backend_btstack_deinit(void) {
     /* Deinitialization stub */
 }
 
+static bool backend_btstack_is_ready(void) {
+    return bt_a2dp_source_is_streaming();
+}
+
 const audio_sink_backend_t audio_sink_backend_btstack = {
     .name = "BTSTACK",
     .init = backend_btstack_init,
@@ -135,5 +121,7 @@ const audio_sink_backend_t audio_sink_backend_btstack = {
     .can_accept_samples = backend_btstack_can_accept_samples,
     .write_samples = backend_btstack_write_samples,
     .deinit = backend_btstack_deinit,
+    .is_ready = backend_btstack_is_ready,
+    .get_buffer_level = NULL,
 };
 

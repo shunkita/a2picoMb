@@ -1,25 +1,7 @@
 /*
- * MIT License
+ * Copyright (c) 2026 a2picoMb
  *
- * Copyright (c) 2026 Shunichi Kitahara
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "mb_core.h"
@@ -28,7 +10,7 @@
 // Diagnostic state for Mockingboard state & IRQ inspection
 mb_diag_t mb_diag = {0};
 
-// 2 VIA instances (Mockingboard #0):
+// 2 VIA instances (Single Mockingboard):
 // mb_vias[0]: VIA #0 ($Cn00-$Cn0F)
 // mb_vias[1]: VIA #1 ($Cn80-$Cn8F)
 via6522_t mb_vias[MB_NUM_VIAS];
@@ -39,8 +21,7 @@ _Static_assert(offsetof(via6522_t, timer_running) == 17, "timer_running offset m
 _Static_assert(offsetof(via6522_t, t2_counter) == 20, "t2_counter offset must be 20");
 _Static_assert(offsetof(via6522_t, t2_armed) == 23, "t2_armed offset must be 23");
 
-// Audio Event Queues (Core 1 -> Core 0)
-// Currently MB#0 uses queues 0 and 1; 2 and 3 reserved for expansion
+// Audio Event Queues (Core 1 -> Core 0): VIA #0 (Left) and VIA #1 (Right)
 audio_queue_t mb_audio_queues[MB_NUM_QUEUES];
 
 // SSI-263A speech chip bus interface state ($Cn40-$Cn7F)
@@ -52,7 +33,7 @@ void mb_core_set_time_source(mb_time_us_fn_t fn) {
     mb_time_us = fn;
 }
 
-bool mb_core_ssi263_sync_ca1(void) {
+bool MB_TIME_CRITICAL(mb_core_ssi263_sync_ca1)(void) {
     uint32_t word = __atomic_load_n(&mb_ssi263.ca1_word, __ATOMIC_ACQUIRE);
     uint32_t missed = (word >> 1) - (mb_ssi263_ca1_seen >> 1);
     bool level = (mb_ssi263_ca1_seen & 1) != 0;
@@ -72,8 +53,12 @@ static uint32_t audio_event_count[MB_NUM_QUEUES] = {0};
 // AY register address latch state for each VIA (R0-R15)
 static uint8_t ay_selected_reg[MB_NUM_VIAS];
 
-// AY-3-8913 register bit masks (R0-R15)
+// AY-3-8913 register bit masks (R0-R15), kept in SRAM on ARM to avoid XIP stalls on Core 1
+#if defined(__arm__) || defined(__thumb__)
+static const uint8_t __attribute__((section(".time_critical.ay_reg_mask"))) ay_reg_mask[16] = {
+#else
 static const uint8_t ay_reg_mask[16] = {
+#endif
     0xFF, // R0: Channel A Tone Period Fine (8-bit)
     0x0F, // R1: Channel A Tone Period Coarse (4-bit)
     0xFF, // R2: Channel B Tone Period Fine (8-bit)
@@ -131,10 +116,10 @@ void mb_core_init(void) {
         audio_queue_init(&mb_audio_queues[i]);
     }
     ssi263_init(&mb_ssi263);
-    mb_ssi263_ca1_seen = 0;
+    mb_ssi263_ca1_seen = mb_ssi263.ca1_word;
 }
 
-void mb_core_reset(void) {
+void MB_TIME_CRITICAL(mb_core_reset)(void) {
     mb_diag.irq_line_asserted = false;
     for (int i = 0; i < MB_NUM_VIAS; i++) {
         via6522_reset(&mb_vias[i]);
@@ -147,7 +132,7 @@ void mb_core_reset(void) {
     ssi263_reset(&mb_ssi263);
 }
 
-void mb_core_bus_write(uint8_t offset, uint8_t data) {
+void MB_TIME_CRITICAL(mb_core_bus_write)(uint8_t offset, uint8_t data) {
     int via_idx = (offset >> 7) & 1;
     via6522_t *target_via = &mb_vias[via_idx];
     uint8_t reg = offset & 0x0F;
@@ -167,7 +152,7 @@ void mb_core_bus_write(uint8_t offset, uint8_t data) {
     }
 }
 
-void mb_core_handle_t1_underflow(int via_idx, bool *irq_updated) {
+void MB_TIME_CRITICAL(mb_core_handle_t1_underflow)(int via_idx, bool *irq_updated) {
     via6522_t *via = &mb_vias[via_idx];
     mb_diag.t1_underflow_count[via_idx]++;
 
@@ -184,7 +169,7 @@ void mb_core_handle_t1_underflow(int via_idx, bool *irq_updated) {
     via->t1_counter = via->t1_latch;
 }
 
-void mb_core_handle_t2_underflow(int via_idx, bool *irq_updated) {
+void MB_TIME_CRITICAL(mb_core_handle_t2_underflow)(int via_idx, bool *irq_updated) {
     via6522_t *via = &mb_vias[via_idx];
     if (via->t2_armed) {
         via->ifr |= 0x20;

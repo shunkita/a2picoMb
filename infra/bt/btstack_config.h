@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2026 a2picoMb
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef _BTSTACK_CONFIG_H
 #define _BTSTACK_CONFIG_H
 

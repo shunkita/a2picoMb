@@ -6,6 +6,7 @@ target_sources(a2pico_mb_core INTERFACE
         src/ayumi.c
         src/ay_audio.c
         src/ssi263.c
+        src/ssi263_synth.c
         )
 
 target_include_directories(a2pico_mb_core INTERFACE

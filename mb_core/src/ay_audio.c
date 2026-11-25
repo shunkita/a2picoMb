@@ -1,28 +1,8 @@
 /*
-
-MIT License
-
-Copyright (c) 2026 Shunichi Kitahara
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-*/
+ * Copyright (c) 2026 a2picoMb
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "mb_core.h"
 #include "ayumi.h"
@@ -31,12 +11,14 @@ SOFTWARE.
 
 #define AYUMI_CLOCK_RATE  1022727.0f
 #define AYUMI_SAMPLE_RATE 44100
+#define AYUMI_IDLE_SETTLE_SAMPLES 1280u
 
-static struct ayumi ayumis[MB_NUM_QUEUES];
-static uint8_t ay_regs[MB_NUM_QUEUES][16];
+static struct ayumi ayumis[MB_NUM_CHIPS];
+static uint8_t ay_regs[MB_NUM_CHIPS][16];
+static uint16_t ay_idle_samples[MB_NUM_CHIPS];
 
 void ay_audio_write_reg(uint8_t chip_index, uint8_t reg, uint8_t value) {
-    if (chip_index >= MB_NUM_QUEUES) return;
+    if (chip_index >= MB_NUM_CHIPS) return;
 
     struct ayumi *ay = &ayumis[chip_index];
     uint8_t *regs = ay_regs[chip_index];
@@ -83,6 +65,9 @@ void ay_audio_write_reg(uint8_t chip_index, uint8_t reg, uint8_t value) {
         int t_off = (regs[7] >> ch) & 1;
         int n_off = (regs[7] >> (ch + 3)) & 1;
         int e_on  = (value >> 4) & 1;
+        if ((value & 0x1F) != 0) {
+            ay_idle_samples[chip_index] = 0;
+        }
         ayumi_set_volume(ay, ch, value & 0x0F);
         ayumi_set_mixer(ay, ch, t_off, n_off, e_on);
         break;
@@ -104,22 +89,25 @@ void ay_audio_write_reg(uint8_t chip_index, uint8_t reg, uint8_t value) {
 }
 
 void ay_audio_reset(uint8_t chip_index) {
-    if (chip_index >= MB_NUM_QUEUES) return;
+    if (chip_index >= MB_NUM_CHIPS) return;
 
     struct ayumi *ay = &ayumis[chip_index];
     uint8_t *regs = ay_regs[chip_index];
 
     memset(regs, 0, 16);
+    ay_idle_samples[chip_index] = AYUMI_IDLE_SETTLE_SAMPLES;
     ayumi_configure(ay, 0, AYUMI_CLOCK_RATE, AYUMI_SAMPLE_RATE);
     for (int ch = 0; ch < 3; ch++) {
-        ayumi_set_pan(ay, ch, 0.5f, 0);
+        // ayumi.c uses mono-optimized processing (pan_left = 1.0f - pan).
+        // Set pan = 0.0f so each PSG outputs at unity gain (1.0f) for chip-level L/R routing.
+        ayumi_set_pan(ay, ch, 0.0f, 0);
         ayumi_set_mixer(ay, ch, 1, 1, 0); // all off (tone off, noise off, env off)
         ayumi_set_volume(ay, ch, 0);
     }
 }
 
 void ay_audio_handle_event(uint8_t chip_index, const ay_event_t *ev) {
-    if (!ev || chip_index >= MB_NUM_QUEUES) return;
+    if (!ev || chip_index >= MB_NUM_CHIPS) return;
 
     if (ev->type == AY_EVENT_REGISTER_WRITE) {
         ay_audio_write_reg(chip_index, ev->reg, ev->value);
@@ -129,8 +117,8 @@ void ay_audio_handle_event(uint8_t chip_index, const ay_event_t *ev) {
 }
 
 void ay_audio_init(void) {
-    // Initialize 4 AYUMI instances (Core 0)
-    for (int q = 0; q < MB_NUM_QUEUES; q++) {
+    // Initialize 2 AYUMI instances (Core 0: VIA #0 Left, VIA #1 Right)
+    for (int q = 0; q < MB_NUM_CHIPS; q++) {
         ay_audio_reset(q);
     }
     ssi263_set_sample_rate(&mb_ssi263, AYUMI_SAMPLE_RATE);
@@ -162,18 +150,32 @@ void ay_audio_produce_pcm(int16_t *pcm_buffer, int num_samples) {
         t_start = to_us_since_boot(get_absolute_time());
     }
 
-    // Single unified loop: synthesize AY0 & AY1 (and SSI-263A when active), mix, clip, and store into pcm_buffer
+    // Single unified loop: synthesize AY0 (Left) & AY1 (Right) and SSI-263A (Center), clip, and store stereo PCM
     bool ssi_active = !ssi263_is_silent(&mb_ssi263);
+    bool ay0_silent_regs = (((ay_regs[0][8] | ay_regs[0][9] | ay_regs[0][10]) & 0x1Fu) == 0u);
+    bool ay1_silent_regs = (((ay_regs[1][8] | ay_regs[1][9] | ay_regs[1][10]) & 0x1Fu) == 0u);
 
     for (int i = 0; i < num_samples; i++) {
-        ayumi_process(&ayumis[0]);
-        ayumi_remove_dc(&ayumis[0]);
+        float l = 0.0f;
+        float r = 0.0f;
 
-        ayumi_process(&ayumis[1]);
-        ayumi_remove_dc(&ayumis[1]);
+        if (!ay0_silent_regs || ay_idle_samples[0] < AYUMI_IDLE_SETTLE_SAMPLES) {
+            if (ay0_silent_regs) {
+                ay_idle_samples[0]++;
+            }
+            ayumi_process(&ayumis[0]);
+            ayumi_remove_dc(&ayumis[0]);
+            l = ayumis[0].left * 16384.0f;
+        }
 
-        float l = (ayumis[0].left + ayumis[1].left) * 16384.0f;
-        float r = (ayumis[0].right + ayumis[1].right) * 16384.0f;
+        if (!ay1_silent_regs || ay_idle_samples[1] < AYUMI_IDLE_SETTLE_SAMPLES) {
+            if (ay1_silent_regs) {
+                ay_idle_samples[1]++;
+            }
+            ayumi_process(&ayumis[1]);
+            ayumi_remove_dc(&ayumis[1]);
+            r = ayumis[1].left * 16384.0f;
+        }
 
         if (ssi_active) {
             float speech = ssi263_render_sample(&mb_ssi263) * 30000.0f;
@@ -211,7 +213,7 @@ int16_t ay_audio_get_last_max_amp(void) {
 }
 
 uint8_t ay_audio_get_reg(uint8_t chip_index, uint8_t reg) {
-    if (chip_index >= MB_NUM_QUEUES || reg >= 16) return 0;
+    if (chip_index >= MB_NUM_CHIPS || reg >= 16) return 0;
     return ay_regs[chip_index][reg];
 }
 

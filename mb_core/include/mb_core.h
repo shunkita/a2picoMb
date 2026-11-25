@@ -1,25 +1,7 @@
 /*
- * MIT License
+ * Copyright (c) 2026 a2picoMb
  *
- * Copyright (c) 2026 Shunichi Kitahara
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #ifndef _MB_CORE_H
@@ -45,7 +27,7 @@ extern "C" {
 
 #define MB_NUM_VIAS   2
 #define MB_NUM_CHIPS  2
-#define MB_NUM_QUEUES 4
+#define MB_NUM_QUEUES 2
 
 #define AUDIO_QUEUE_CAPACITY 256
 
@@ -274,6 +256,7 @@ static __always_inline bool audio_queue_push(audio_queue_t *q, uint8_t reg, uint
     q->buffer[q->head & (AUDIO_QUEUE_CAPACITY - 1)].value = value;
     __dmb();
     q->head++;
+    MB_SEV();
     return true;
 }
 
@@ -287,6 +270,7 @@ static __always_inline bool audio_queue_push_reset(audio_queue_t *q) {
     q->buffer[q->head & (AUDIO_QUEUE_CAPACITY - 1)].value = 0;
     __dmb();
     q->head++;
+    MB_SEV();
     return true;
 }
 

@@ -1,37 +1,10 @@
 /*
-
-MIT License
-
-Copyright (c) 2026 Shunichi Kitahara
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-*/
+ * Copyright (c) 2026 a2picoMb
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include "via6522.h"
-
-#if defined(PICO_PLATFORM) || defined(PICO_SDK_VERSION_MAJOR)
-#include <pico/platform.h>
-#endif
-#ifndef __time_critical_func
-#define __time_critical_func(name) name
-#endif
 
 void via6522_init(via6522_t *via) {
     via->ora = 0;
@@ -57,7 +30,7 @@ void via6522_init(via6522_t *via) {
     via->t2_armed = 0;
 }
 
-void via6522_reset(via6522_t *via) {
+void MB_TIME_CRITICAL(via6522_reset)(via6522_t *via) {
     via->ora = 0;
     via->orb = 0;
     via->ddra = 0;
@@ -81,7 +54,7 @@ void via6522_reset(via6522_t *via) {
     via->t2_armed = 0;
 }
 
-void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t data) {
+void MB_TIME_CRITICAL(via6522_write)(via6522_t *via, uint8_t reg, uint8_t data) {
     switch (reg & 0x0F) {
     case REG_ORB: // $00
         via->orb = data;
@@ -189,7 +162,7 @@ void __time_critical_func(via6522_write)(via6522_t *via, uint8_t reg, uint8_t da
     }
 }
 
-bool __time_critical_func(via6522_sync_tick)(via6522_t *via) {
+bool MB_TIME_CRITICAL(via6522_sync_tick)(via6522_t *via) {
     bool irq = false;
 
     if (via->timer_running & TIMER_T1_RUNNING) {

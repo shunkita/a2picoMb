@@ -1,28 +1,8 @@
 /*
-
-MIT License
-
-Copyright (c) 2026 Shunichi Kitahara
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-*/
+ * Copyright (c) 2026 a2picoMb
+ *
+ * SPDX-License-Identifier: MIT
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -48,11 +28,7 @@ static inline void bt_a2dp_set_led(bool on) {
 #define AUDIO_TIMEOUT_MS 20
 #define SBC_STORAGE_SIZE 1030
 #define NUM_CHANNELS 2
-
-typedef enum {
-    PACKET_STATE_IDLE = 0,
-    PACKET_STATE_READY_TO_SEND,
-} packet_state_t;
+#define A2DP_PACKET_QUEUE_SIZE 2
 
 typedef struct {
     uint16_t a2dp_cid;
@@ -66,9 +42,11 @@ typedef struct {
     uint32_t packets_scheduled;
     uint32_t stat_packets_generated;
     uint32_t stat_tx_wait_count;
-    packet_state_t packet_state;
-    uint8_t sbc_storage[SBC_STORAGE_SIZE];
-    uint16_t sbc_storage_count;
+    uint8_t packet_buffers[A2DP_PACKET_QUEUE_SIZE][SBC_STORAGE_SIZE];
+    uint16_t packet_lengths[A2DP_PACKET_QUEUE_SIZE];
+    uint8_t pkt_head;
+    uint8_t pkt_tail;
+    uint8_t pkt_count;
     uint16_t max_media_payload_size;
 } a2dp_source_context_t;
 
@@ -120,47 +98,60 @@ static uint32_t bt_timer_tick_count = 0;
 
 static void send_media_packet(void) {
     if (!sbc_encoder_instance) return;
-    if (media_tracker.packet_state != PACKET_STATE_READY_TO_SEND) return;
+    if (media_tracker.pkt_count == 0) return;
 
+    uint8_t slot = media_tracker.pkt_tail;
     int num_bytes_in_frame = sbc_encoder_instance->sbc_buffer_length(&sbc_encoder_state);
-    int bytes_in_storage = media_tracker.sbc_storage_count;
-    if (bytes_in_storage == 0) return;
+    int bytes_in_storage = media_tracker.packet_lengths[slot];
+    if (bytes_in_storage == 0 || num_bytes_in_frame <= 0) {
+        media_tracker.packet_lengths[slot] = 0;
+        media_tracker.pkt_tail = (media_tracker.pkt_tail + 1) % A2DP_PACKET_QUEUE_SIZE;
+        media_tracker.pkt_count--;
+        return;
+    }
     uint8_t num_sbc_frames = bytes_in_storage / num_bytes_in_frame;
 
-    media_tracker.sbc_storage[0] = num_sbc_frames;
+    media_tracker.packet_buffers[slot][0] = num_sbc_frames;
     bt_last_send_status = a2dp_source_stream_send_media_payload_rtp(media_tracker.a2dp_cid, media_tracker.local_seid, 0,
                                                                     media_tracker.rtp_timestamp,
-                                                                    media_tracker.sbc_storage, bytes_in_storage + 1);
+                                                                    media_tracker.packet_buffers[slot], bytes_in_storage + 1);
     bt_packet_send_count++;
 
     unsigned int num_audio_samples_per_sbc_buffer = sbc_encoder_instance->num_audio_frames(&sbc_encoder_state);
     media_tracker.rtp_timestamp += num_sbc_frames * num_audio_samples_per_sbc_buffer;
-    media_tracker.sbc_storage_count = 0;
-    media_tracker.packet_state = PACKET_STATE_IDLE;
+    media_tracker.packet_lengths[slot] = 0;
+    media_tracker.pkt_tail = (media_tracker.pkt_tail + 1) % A2DP_PACKET_QUEUE_SIZE;
+    media_tracker.pkt_count--;
 
-    // IMPORTANT: Do NOT generate next packet here; let the 44.1kHz absolute timer handle it.
+    // Flush the 2nd queued packet immediately after transient RF jitter clears
+    if (media_tracker.pkt_count > 0) {
+        a2dp_source_stream_endpoint_request_can_send_now(media_tracker.a2dp_cid, media_tracker.local_seid);
+    }
 }
 
 static uint32_t last_total_handler_us = 0;
 static uint32_t last_pcm_time_us = 0;
 static uint32_t last_sbc_time_us = 0;
 
-static int fill_sbc_audio_buffer(a2dp_source_context_t *context) {
+static int fill_sbc_audio_buffer(a2dp_source_context_t *context, uint8_t slot) {
     if (!sbc_encoder_instance || !pcm_data_callback) return 0;
     int total_samples_read = 0;
     unsigned int num_audio_samples = sbc_encoder_instance->num_audio_frames(&sbc_encoder_state);
     uint16_t sbc_buffer_length = sbc_encoder_instance->sbc_buffer_length(&sbc_encoder_state);
+    uint8_t *pkt_buf = context->packet_buffers[slot];
+    uint16_t pkt_len = 0;
 
-    while ((context->max_media_payload_size - context->sbc_storage_count) >= sbc_buffer_length) {
+    while ((context->max_media_payload_size - pkt_len) >= sbc_buffer_length) {
         int16_t pcm_frame[256 * NUM_CHANNELS];
         pcm_data_callback(pcm_frame, num_audio_samples);
 
         sbc_encoder_instance->encode_signed_16(&sbc_encoder_state, pcm_frame,
-                                               &context->sbc_storage[1 + context->sbc_storage_count]);
+                                               &pkt_buf[1 + pkt_len]);
 
         total_samples_read += num_audio_samples;
-        context->sbc_storage_count += sbc_encoder_instance->sbc_buffer_length(&sbc_encoder_state);
+        pkt_len += sbc_encoder_instance->sbc_buffer_length(&sbc_encoder_state);
     }
+    context->packet_lengths[slot] = pkt_len;
     return total_samples_read;
 }
 
@@ -184,26 +175,31 @@ static void audio_timeout_handler(btstack_timer_source_t *timer) {
     btstack_run_loop_set_timer(&context->audio_timer, delay_ms);
     btstack_run_loop_add_timer(&context->audio_timer);
 
-    // 2. Single buffer protection: if previous packet is still pending transmission
-    if (context->packet_state != PACKET_STATE_IDLE) {
+    // 2. 2-slot queue protection: only skip if both slots are full (RF stalled > 29 ms)
+    if (context->pkt_count >= A2DP_PACKET_QUEUE_SIZE) {
         context->stat_tx_wait_count++;
-        // Hold in pending state; never overwrite or duplicate packet generation.
         return;
     }
 
-    // 3. Generate 640 samples (5 SBC frames)
-    fill_sbc_audio_buffer(context);
+    // 3. Generate 640 samples (5 SBC frames) into next available slot
+    fill_sbc_audio_buffer(context, context->pkt_head);
+    context->pkt_head = (context->pkt_head + 1) % A2DP_PACKET_QUEUE_SIZE;
+    context->pkt_count++;
     context->stat_packets_generated++;
-    context->packet_state = PACKET_STATE_READY_TO_SEND;
 
-    // 4. Request can-send-now from BTstack
-    a2dp_source_stream_endpoint_request_can_send_now(context->a2dp_cid, context->local_seid);
+    // 4. Request can-send-now from BTstack when transitioning 0 -> 1
+    if (context->pkt_count == 1) {
+        a2dp_source_stream_endpoint_request_can_send_now(context->a2dp_cid, context->local_seid);
+    }
 }
 
 static void a2dp_timer_start(a2dp_source_context_t *context) {
     context->max_media_payload_size = btstack_min(a2dp_max_media_payload_size(context->a2dp_cid, context->local_seid), SBC_STORAGE_SIZE);
-    context->sbc_storage_count = 0;
-    context->packet_state = PACKET_STATE_IDLE;
+    context->pkt_head = 0;
+    context->pkt_tail = 0;
+    context->pkt_count = 0;
+    context->packet_lengths[0] = 0;
+    context->packet_lengths[1] = 0;
     context->streaming = 1;
     context->stream_start_ms = btstack_run_loop_get_time_ms();
     context->packets_scheduled = 0;
@@ -211,9 +207,10 @@ static void a2dp_timer_start(a2dp_source_context_t *context) {
     context->stat_tx_wait_count = 0;
 
     // Generate initial packet (N=0) and request send
-    fill_sbc_audio_buffer(context);
+    fill_sbc_audio_buffer(context, context->pkt_head);
+    context->pkt_head = (context->pkt_head + 1) % A2DP_PACKET_QUEUE_SIZE;
+    context->pkt_count = 1;
     context->stat_packets_generated++;
-    context->packet_state = PACKET_STATE_READY_TO_SEND;
     a2dp_source_stream_endpoint_request_can_send_now(context->a2dp_cid, context->local_seid);
 
     // Calculate next target time (N=1) and set timer
@@ -372,6 +369,9 @@ static void a2dp_source_packet_handler(uint8_t packet_type, uint16_t channel, ui
         media_tracker.streaming = 0;
         media_tracker.stream_opened = 0;
         media_tracker.a2dp_cid = 0;
+        media_tracker.pkt_head = 0;
+        media_tracker.pkt_tail = 0;
+        media_tracker.pkt_count = 0;
         target_connected = false;
         btstack_run_loop_remove_timer(&media_tracker.audio_timer);
         bt_a2dp_set_led(false);
@@ -386,6 +386,9 @@ static void a2dp_source_packet_handler(uint8_t packet_type, uint16_t channel, ui
 bool bt_a2dp_source_init(bt_a2dp_pcm_callback_t callback) {
     pcm_data_callback = callback;
     memset(&media_tracker, 0, sizeof(media_tracker));
+    media_tracker.pkt_head = 0;
+    media_tracker.pkt_tail = 0;
+    media_tracker.pkt_count = 0;
 
     // 1. Initialize and turn off direct GPIO LED (A2Pico2 WE / Standard)
     if (a2pico_led() >= 0) {

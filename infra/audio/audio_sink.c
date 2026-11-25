@@ -1,25 +1,7 @@
 /*
- * MIT License
+ * Copyright (c) 2026 a2picoMb
  *
- * Copyright (c) 2026 Shunichi Kitahara
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
+ * SPDX-License-Identifier: MIT
  */
 
 #include "audio_sink.h"
@@ -28,6 +10,9 @@
 #if defined(A2PICOMB_AUDIO_BACKEND_BTSTACK)
 extern const audio_sink_backend_t audio_sink_backend_btstack;
 static const audio_sink_backend_t *active_backend = &audio_sink_backend_btstack;
+#elif defined(A2PICOMB_AUDIO_BACKEND_USB_DEVICE)
+extern const audio_sink_backend_t audio_sink_backend_usb_device;
+static const audio_sink_backend_t *active_backend = &audio_sink_backend_usb_device;
 #else
 static const audio_sink_backend_t *active_backend = NULL;
 #endif
@@ -63,5 +48,33 @@ void audio_sink_deinit(void) {
     if (active_backend && active_backend->deinit) {
         active_backend->deinit();
     }
+}
+
+bool audio_sink_is_ready(void) {
+    if (active_backend && active_backend->is_ready) {
+        return active_backend->is_ready();
+    }
+    return false;
+}
+
+uint32_t audio_sink_get_buffer_level(void) {
+    if (active_backend && active_backend->get_buffer_level) {
+        return active_backend->get_buffer_level();
+    }
+    return 0;
+}
+
+bool audio_sink_handles_core_task(void) {
+    if (active_backend && active_backend->handles_core_task) {
+        return active_backend->handles_core_task();
+    }
+    return false;
+}
+
+const char *audio_sink_backend_name(void) {
+    if (active_backend && active_backend->name) {
+        return active_backend->name;
+    }
+    return "NONE";
 }
 
