@@ -24,7 +24,7 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
 endif ()
 
-set(VERSION "2026-11-25" CACHE STRING "Firmware release date/version")
+set(VERSION "2026-11-28" CACHE STRING "Firmware release date/version")
 
 # Audio sink backend selection: BTSTACK (default), USB_DEVICE, or ALL
 set(A2PICOMB_AUDIO_BACKEND "BTSTACK" CACHE STRING "Audio sink backend (BTSTACK, USB_DEVICE, ALL)")
