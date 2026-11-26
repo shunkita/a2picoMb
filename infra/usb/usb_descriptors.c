@@ -71,11 +71,19 @@ static tusb_desc_device_t const device_descriptor = {
 };
 
 uint8_t const *tud_descriptor_device_cb(void) {
-    return (uint8_t const *)&device_descriptor;
+    static tusb_desc_device_t dev_desc;
+    pico_unique_board_id_t board_id;
+
+    dev_desc = device_descriptor;
+    pico_get_unique_board_id(&board_id);
+    /* Vary idProduct per board (0x4010..0x401F) to avoid macOS AppleUSBAudio UID collision. */
+    dev_desc.idProduct = (uint16_t)(0x4010u | (board_id.id[PICO_UNIQUE_BOARD_ID_SIZE_BYTES - 1] & 0x0Fu));
+    return (uint8_t const *)&dev_desc;
 }
 
 static uint8_t const configuration_descriptor[] = {
-    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, USB_CONFIGURATION_DESC_LEN, 0x00, 100),
+    /* 0xC0 = Self-Powered (USB 2.0 bit 7 + bit 6), 100 mA -> bMaxPower = 50. */
+    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, USB_CONFIGURATION_DESC_LEN, 0xC0, 100),
 
     TUD_AUDIO_DESC_IAD(ITF_NUM_AUDIO_CONTROL, 2, STRID_PRODUCT),
     TUD_AUDIO_DESC_STD_AC(ITF_NUM_AUDIO_CONTROL, 0, STRID_PRODUCT),
