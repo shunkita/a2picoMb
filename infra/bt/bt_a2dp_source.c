@@ -20,7 +20,7 @@
 static inline void bt_a2dp_set_led(bool on) {
     if (a2pico_led() >= 0) {
         gpio_put(a2pico_led(), on ? 1 : 0);
-    } else if (a2pico_radio()) {
+    } else {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on ? 1 : 0);
     }
 }
@@ -390,21 +390,19 @@ bool bt_a2dp_source_init(bt_a2dp_pcm_callback_t callback) {
     media_tracker.pkt_tail = 0;
     media_tracker.pkt_count = 0;
 
-    // 1. Initialize and turn off direct GPIO LED (A2Pico2 WE / Standard)
-    if (a2pico_led() >= 0) {
-        gpio_init(a2pico_led());
-        gpio_set_dir(a2pico_led(), GPIO_OUT);
-        gpio_put(a2pico_led(), 0);
-    }
-
-    // 2. Initialize CYW43 architecture
+    // 1. Initialize CYW43 architecture
     if (cyw43_arch_init()) {
         printf("[BT] Failed to initialize cyw43_arch\n");
         return false;
     }
 
-    // 3. Turn off radio LED initially (A2Pico2 Lite W)
-    if (a2pico_radio()) {
+    // 2. Initialize and turn off direct GPIO LED (A2Pico2 WE / Standard)
+    //    or turn off radio LED initially (A2Pico2Lite W)
+    if (a2pico_led() >= 0) {
+        gpio_init(a2pico_led());
+        gpio_set_dir(a2pico_led(), GPIO_OUT);
+        gpio_put(a2pico_led(), 0);
+    } else {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 0);
     }
 
