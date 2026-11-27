@@ -12,15 +12,6 @@
 #include <pico/cyw43_arch.h>
 #include <stdio.h>
 
-/* Helper for A2Pico LED control (direct GPIO or CYW43 wireless GPIO) */
-static inline void backend_btstack_set_led(bool on) {
-    if (a2pico_led() >= 0) {
-        gpio_put(a2pico_led(), on ? 1 : 0);
-    } else if (a2pico_radio()) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on ? 1 : 0);
-    }
-}
-
 static bool backend_btstack_init(void) {
     printf("[AUDIO] Initializing Bluetooth A2DP Source (BTstack)...\n");
 
