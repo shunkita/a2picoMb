@@ -69,7 +69,6 @@ function(a2picomb_configure_target tgt backend enable_mock)
             )
 
     target_compile_definitions(${tgt} PRIVATE
-            A2PICO2=1
             PICO_STDIO_USB_STDOUT_TIMEOUT_US=1000
             SSI263_ENABLE_MOCK=$<BOOL:${enable_mock}>
             )
