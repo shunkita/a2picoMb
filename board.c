@@ -12,16 +12,14 @@
 #include "board.h"
 #include "mb_core.h"
 
-#define SM_SYNC 3
-
 #define PHI0_CYCLES_PER_TICK 1
 
 volatile bool reset;
 
 static __always_inline uint32_t mb_getaddr(void) {
-  while (pio0->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_ADDR))) {
-    if (pio0->irq & 1) {
-      pio_interrupt_clear(pio0, 0);
+  while (A2_PIO->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_ADDR))) {
+    if (A2_PIO->irq & 1) {
+      pio_interrupt_clear(A2_PIO, 0);
 
       // Tick 2 VIAs for 1 MHz Phi0 clock tick
       if (mb_core_tick_phi0()) {
@@ -31,15 +29,15 @@ static __always_inline uint32_t mb_getaddr(void) {
 
     tight_loop_contents();
   }
-  return pio0->rxf[SM_ADDR];
+  return A2_PIO->rxf[SM_ADDR];
 }
 
 static __always_inline uint32_t mb_getdata(void) {
   uint retry = 256;
-  while (pio0->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_WRITE)) && --retry) {
+  while (A2_PIO->fstat & (1u << (PIO_FSTAT_RXEMPTY_LSB + SM_WRITE)) && --retry) {
     tight_loop_contents();
   }
-  return pio0->rxf[SM_WRITE];
+  return A2_PIO->rxf[SM_WRITE];
 }
 
 static void __time_critical_func(handler)(bool asserted) {
@@ -63,7 +61,7 @@ static void init_sync_sm(PIO pio, uint sm) {
 
 void __time_critical_func(board)(void) {
   mb_core_init();
-  init_sync_sm(pio0, SM_SYNC);
+  init_sync_sm(A2_PIO, SM_SYNC);
 
   a2pico_resethandler(&handler);
 
